@@ -7,6 +7,7 @@ import { ProtectedRoute, AdminRoute } from "@/routes/ProtectedRoute";
 import WorkspaceIndex from "@/routes/WorkspaceIndex";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
+import Tasks from "@/pages/Tasks";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/auth/Login";
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/app" element={<WorkspaceIndex />} />
 
                 <Route path="/app/:workspaceId" element={<AppLayout />}>
+                                  <Route path="tasks" element={<Tasks />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="projects" element={<Projects />} />
                   <Route path="projects/:projectId" element={<ProjectLayout />}>

@@ -10,6 +10,7 @@ import {
   Plus,
   Shield,
   Users,
+  ListChecks,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -28,6 +29,7 @@ import { useNavigate } from "react-router-dom";
 const navItems = [
   { to: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "projects", label: "Projects", icon: FolderKanban },
+  { to: "tasks", label: "Tasks", icon: ListChecks },
   { to: "my-tasks", label: "My Tasks", icon: CheckSquare },
   { to: "chat", label: "Team Chat", icon: MessageSquare },
   { to: "team", label: "Team", icon: Users },

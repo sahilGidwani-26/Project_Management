@@ -48,14 +48,23 @@ export interface Project {
 
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 
+export interface TaskProjectRef {
+  _id: string;
+  name: string;
+  color: string;
+}
+
 export interface Task {
   _id: string;
   workspaceId: string;
-  projectId: string;
+  projectId?: TaskProjectRef;
+  taskNumber: number;
+  parentTaskId?: string;
   title: string;
   description?: string;
-  assigneeId?: User;
+  assigneeIds: User[];
   reporterId?: User;
+  createdBy?: User;
   status: TaskStatus;
   priority: Priority;
   startDate?: string;
@@ -72,6 +81,19 @@ export interface Comment {
   taskId: string;
   userId: User;
   content: string;
+  mentions?: User[];
+  createdAt: string;
+}
+
+export interface Attachment {
+  _id: string;
+  taskId?: string;
+  projectId?: string;
+  uploadedBy: User;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
   createdAt: string;
 }
 

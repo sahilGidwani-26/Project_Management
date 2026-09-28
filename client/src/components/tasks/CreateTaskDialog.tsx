@@ -1,28 +1,36 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, X, FolderKanban } from "lucide-react";
 import { api, apiError } from "@/lib/api";
-import { TaskStatus, WorkspaceMember } from "@/types";
+import { TaskStatus, Project } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { initials } from "@/lib/utils";
+import { AssigneeMultiSelect } from "./AssigneeMultiSelect";
 import { toast } from "sonner";
 
+function invalidateAllTaskLists(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey[0];
+      return key === "tasks" || key === "tasks-list" || key === "workspace-tasks" || key === "my-tasks-assigned" || key === "my-tasks-created";
+    },
+  });
+}
+
 export function CreateTaskDialog({
-  status,
-  projectId,
   workspaceId,
+  projectId, // if provided, project is locked (e.g. opened from a project's Kanban board); otherwise the user picks one, or none
+  defaultStatus = "Todo",
   open,
   onOpenChange,
 }: {
-  status: TaskStatus;
-  projectId: string;
   workspaceId: string;
+  projectId?: string;
+  defaultStatus?: TaskStatus;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -30,35 +38,61 @@ export function CreateTaskDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Medium");
+  const [status, setStatus] = useState<TaskStatus>(defaultStatus);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectId || "none");
+  const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [assigneeId, setAssigneeId] = useState<string>("unassigned");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [subtaskDraft, setSubtaskDraft] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { data: members } = useQuery({
-    queryKey: ["members", workspaceId],
-    queryFn: async () => (await api.get(`/workspaces/${workspaceId}/members`)).data.data as WorkspaceMember[],
-    enabled: !!workspaceId && open,
+  const isProjectLocked = !!projectId;
+
+  const { data: projects } = useQuery({
+    queryKey: ["projects-picker", workspaceId],
+    queryFn: async () => (await api.get(`/projects/workspace/${workspaceId}?limit=100`)).data.data as Project[],
+    enabled: !isProjectLocked && open,
   });
+
+  const addSubtaskDraft = () => {
+    if (!subtaskDraft.trim()) return;
+    setSubtasks((prev) => [...prev, subtaskDraft.trim()]);
+    setSubtaskDraft("");
+  };
+
+  const reset = () => {
+    setTitle("");
+    setDescription("");
+    setAssigneeIds([]);
+    setSubtasks([]);
+    setSubtaskDraft("");
+    setStartDate("");
+    setDueDate("");
+    setStatus(defaultStatus);
+    setSelectedProjectId(projectId || "none");
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
+      const finalProjectId = selectedProjectId === "none" ? undefined : selectedProjectId;
       await api.post("/tasks", {
         workspaceId,
-        projectId,
+        projectId: finalProjectId,
         title,
         description,
         status,
         priority,
+        assigneeIds,
+        startDate: startDate ? new Date(startDate).toISOString() : undefined,
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
-        assigneeId: assigneeId === "unassigned" ? undefined : assigneeId,
+        subtasks,
       });
-      qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+      invalidateAllTaskLists(qc);
       onOpenChange(false);
-      setTitle("");
-      setDescription("");
-      setAssigneeId("unassigned");
+      reset();
       toast.success("Task created");
     } catch (err) {
       toast.error(apiError(err));
@@ -69,44 +103,63 @@ export function CreateTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto scrollbar-thin">
         <DialogHeader>
-          <DialogTitle>New task in {status}</DialogTitle>
+          <DialogTitle>New task</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="title">Title</Label>
             <Input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Design the login screen" autoFocus />
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Add more detail (optional)" />
+            <Label>Project</Label>
+            {isProjectLocked ? (
+              <div className="flex items-center gap-2 rounded-md border border-input bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+                <FolderKanban className="h-4 w-4" />
+                This task belongs to the current project
+              </div>
+            ) : (
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No project</SelectItem>
+                  {projects?.map((p) => (
+                    <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Assignee</Label>
-            <Select value={assigneeId} onValueChange={setAssigneeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Unassigned" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {members?.map((m) => (
-                  <SelectItem key={m.userId._id} value={m.userId._id}>
-                    <span className="flex items-center gap-2">
-                      <Avatar className="h-5 w-5">
-                        <AvatarImage src={m.userId.profileImage} />
-                        <AvatarFallback className="text-[9px]">{initials(m.userId.name)}</AvatarFallback>
-                      </Avatar>
-                      {m.userId.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="## Overview&#10;Add more detail (optional) — supports ## heading, **bold**, - list"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Assignees</Label>
+            <AssigneeMultiSelect workspaceId={workspaceId} value={assigneeIds} onChange={setAssigneeIds} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Backlog", "Todo", "In Progress", "In Review", "Done"].map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label>Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
@@ -118,11 +171,47 @@ export function CreateTaskDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="startDate">Start date</Label>
+              <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="dueDate">Due date</Label>
               <Input id="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
+
+          <div className="space-y-1.5">
+            <Label>Subtasks</Label>
+            {subtasks.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1.5 text-sm">
+                <span className="flex-1">{s}</span>
+                <button type="button" onClick={() => setSubtasks((prev) => prev.filter((_, idx) => idx !== i))}>
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Input
+                value={subtaskDraft}
+                onChange={(e) => setSubtaskDraft(e.target.value)}
+                placeholder="Add a subtask..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addSubtaskDraft();
+                  }
+                }}
+              />
+              <Button type="button" variant="outline" size="icon" onClick={addSubtaskDraft}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={loading || !title}>

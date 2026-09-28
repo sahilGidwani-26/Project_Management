@@ -6,7 +6,8 @@ export type Priority = "Low" | "Medium" | "High" | "Urgent";
 export interface ITask extends Document {
   _id: Types.ObjectId;
   workspaceId: Types.ObjectId;
-  projectId: Types.ObjectId;
+  projectId?: Types.ObjectId;
+  taskNumber: number;
   title: string;
   description?: string;
   assigneeIds: Types.ObjectId[];
@@ -24,11 +25,11 @@ export interface ITask extends Document {
   order: number;
   recurrence?: {
     frequency: "daily" | "weekly" | "monthly" | "custom";
-    intervalDays?: number; // used when frequency = "custom"
+    intervalDays?: number;
     active: boolean;
   };
-  recurrenceSourceId?: Types.ObjectId; // set on generated occurrences, points to the original recurring task
-  dueReminderSentAt?: Date; // prevents sending the "due soon" email more than once
+  recurrenceSourceId?: Types.ObjectId;
+  dueReminderSentAt?: Date;
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -37,7 +38,8 @@ export interface ITask extends Document {
 const taskSchema = new Schema<ITask>(
   {
     workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
-    projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: "Project", index: true }, // optional: tasks can exist without a project
+    taskNumber: { type: Number, required: true, index: true },
     title: { type: String, required: true, trim: true },
     description: String,
     assigneeIds: [{ type: Schema.Types.ObjectId, ref: "User", index: true }],
@@ -66,6 +68,7 @@ const taskSchema = new Schema<ITask>(
 );
 
 taskSchema.index({ projectId: 1, status: 1 });
+taskSchema.index({ workspaceId: 1, taskNumber: 1 }, { unique: true });
 taskSchema.index({ title: "text", description: "text" });
 
 export const Task = model<ITask>("Task", taskSchema);

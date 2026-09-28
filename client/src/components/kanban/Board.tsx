@@ -104,7 +104,7 @@ export function Board() {
       )}
       {createStatus && (
         <CreateTaskDialog
-          status={createStatus}
+          defaultStatus={createStatus}
           projectId={projectId!}
           workspaceId={workspaceId!}
           open={!!createStatus}

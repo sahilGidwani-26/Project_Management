@@ -6,6 +6,7 @@ import { ProjectTemplate } from "../models/ProjectTemplate";
 import { Project } from "../models/Project";
 import { Milestone } from "../models/Milestone";
 import { Task } from "../models/Task";
+import { getNextSequence } from "../utils/counter";
 
 function slugify(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -56,10 +57,12 @@ export const createProjectFromTemplate = catchAsync(async (req: Request, res: Re
     milestoneMap.set(title, milestone._id.toString());
   }
 
-  for (const t of template.tasks) {
+   for (const t of template.tasks) {
+    const taskNumber = await getNextSequence(`task:${workspaceId}`);
     await Task.create({
       workspaceId,
       projectId: project._id,
+      taskNumber,
       title: t.title,
       description: t.description,
       estimatedMinutes: t.estimatedMinutes,

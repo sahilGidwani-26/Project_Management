@@ -46,11 +46,20 @@ export function TaskCard({ task, index, onClick, dragDisabled }: { task: Task; i
                 </span>
               )}
             </div>
-            {task.assigneeId && (
-              <Avatar className="h-6 w-6">
-                <AvatarImage src={task.assigneeId.profileImage} />
-                <AvatarFallback className="text-[10px]">{initials(task.assigneeId.name)}</AvatarFallback>
-              </Avatar>
+            {!!task.assigneeIds?.length && (
+              <div className="flex -space-x-2">
+                {task.assigneeIds.slice(0, 3).map((a) => (
+                  <Avatar key={a._id} className="h-6 w-6 border-2 border-card">
+                    <AvatarImage src={a.profileImage} />
+                    <AvatarFallback className="text-[10px]">{initials(a.name)}</AvatarFallback>
+                  </Avatar>
+                ))}
+                {task.assigneeIds.length > 3 && (
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-card bg-secondary text-[9px] font-medium">
+                    +{task.assigneeIds.length - 3}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>

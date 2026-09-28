@@ -72,6 +72,7 @@ export function taskDueSoonEmail(params: { taskTitle: string; projectName: strin
   };
 }
 
-export function buildTaskUrl(workspaceId: string, projectId: string, taskId: string) {
-  return `${env.CLIENT_URL}/app/${workspaceId}/projects/${projectId}/board?task=${taskId}`;
+export function buildTaskUrl(workspaceId: string, projectId: string | undefined, taskId: string) {
+  if (projectId) return `${env.CLIENT_URL}/app/${workspaceId}/projects/${projectId}/board?task=${taskId}`;
+  return `${env.CLIENT_URL}/app/${workspaceId}/tasks?task=${taskId}`;
 }
