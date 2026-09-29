@@ -19,11 +19,17 @@ export function AssigneeMultiSelect({
   value,
   onChange,
   disabled,
+  placeholder = "Assign people",
+  menuLabel = "Assign to",
+  excludeUserId,
 }: {
   workspaceId: string;
   value: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
+  placeholder?: string;
+  menuLabel?: string;
+  excludeUserId?: string; // e.g. hide yourself when choosing meeting attendees
 }) {
   const { data: members } = useQuery({
     queryKey: ["members", workspaceId],
@@ -32,6 +38,7 @@ export function AssigneeMultiSelect({
   });
 
   const selected = members?.filter((m) => value.includes(m.userId._id)) || [];
+  const visible = members?.filter((m) => m.userId._id !== excludeUserId) || [];
 
   const toggle = (userId: string) => {
     if (value.includes(userId)) onChange(value.filter((id) => id !== userId));
@@ -44,7 +51,7 @@ export function AssigneeMultiSelect({
         <Button type="button" variant="outline" className="w-full justify-between font-normal" disabled={disabled}>
           {selected.length === 0 ? (
             <span className="flex items-center gap-2 text-muted-foreground">
-              <UserPlus className="h-4 w-4" /> Assign people
+              <UserPlus className="h-4 w-4" /> {placeholder}
             </span>
           ) : (
             <span className="flex items-center gap-1.5 overflow-hidden">
@@ -65,9 +72,9 @@ export function AssigneeMultiSelect({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-64" align="start">
-        <DropdownMenuLabel>Assign to</DropdownMenuLabel>
+        <DropdownMenuLabel>{menuLabel}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {members?.map((m) => (
+        {visible.map((m) => (
           <DropdownMenuCheckboxItem
             key={m.userId._id}
             checked={value.includes(m.userId._id)}
@@ -83,7 +90,7 @@ export function AssigneeMultiSelect({
             </span>
           </DropdownMenuCheckboxItem>
         ))}
-        {!members?.length && <p className="px-2 py-1.5 text-xs text-muted-foreground">No members yet</p>}
+        {!visible.length && <p className="px-2 py-1.5 text-xs text-muted-foreground">No other members yet</p>}
       </DropdownMenuContent>
     </DropdownMenu>
   );

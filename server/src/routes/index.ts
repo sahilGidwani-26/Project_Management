@@ -15,6 +15,7 @@ import attachmentRoutes from "./attachment.routes";
 import templateRoutes from "./template.routes";
 import savedViewRoutes from "./savedView.routes";
 import searchRoutes from "./search.routes";
+import eventRoutes from "./event.routes";
 
 const router = Router();
 
@@ -34,6 +35,7 @@ router.use("/attachments", attachmentRoutes);
 router.use("/templates", templateRoutes);
 router.use("/saved-views", savedViewRoutes);
 router.use("/search", searchRoutes);
+router.use("/events", eventRoutes);
 
 router.get("/health", (_req, res) => res.json({ success: true, message: "API is healthy" }));
 

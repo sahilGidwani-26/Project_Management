@@ -1,11 +1,13 @@
 import { NavLink, useParams } from "react-router-dom";
-import { LayoutDashboard, FolderKanban, CheckSquare, MessageSquare, BarChart3, Users, X } from "lucide-react";
+import { LayoutDashboard, FolderKanban, CheckSquare, MessageSquare, BarChart3, Users, ListChecks, CalendarDays, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "projects", label: "Projects", icon: FolderKanban },
+  { to: "tasks", label: "Tasks", icon: ListChecks },
   { to: "my-tasks", label: "My Tasks", icon: CheckSquare },
+  { to: "calendar", label: "Calendar", icon: CalendarDays },
   { to: "chat", label: "Team Chat", icon: MessageSquare },
   { to: "team", label: "Team", icon: Users },
   { to: "analytics", label: "Analytics", icon: BarChart3 },

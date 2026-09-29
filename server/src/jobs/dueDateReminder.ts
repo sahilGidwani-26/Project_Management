@@ -26,41 +26,46 @@ export function startDueDateReminderJob(io: SocketIOServer) {
         dueReminderSentAt: { $exists: false },
         assigneeIds: { $exists: true, $not: { $size: 0 } },
       })
-        .populate<{ projectId: {
-            [x: string]: any; name: string 
-} }>("projectId", "name")
+        .populate<{ projectId: { name: string } }>("projectId", "name")
         .limit(200);
 
       for (const task of dueSoonTasks) {
-        const users = await User.find({ _id: { $in: task.assigneeIds } }).select("email name notificationPreferences");
-       const projectIdStr = task.projectId ? ((task.projectId as any)._id?.toString() || (task.projectId as any).toString()) : undefined;
-const taskUrl = buildTaskUrl(task.workspaceId.toString(), projectIdStr, task._id.toString());
+        try {
+          const users = await User.find({ _id: { $in: task.assigneeIds } }).select("email name notificationPreferences");
+          const projectIdStr = task.projectId ? ((task.projectId as any)._id?.toString() || (task.projectId as any).toString()) : undefined;
+          const taskUrl = buildTaskUrl(task.workspaceId.toString(), projectIdStr, task._id.toString());
 
-        for (const u of users) {
-          await Notification.create({
-            userId: u._id,
-            type: "deadline",
-            title: "Deadline approaching",
-            message: `"${task.title}" is due soon`,
-            relatedWorkspaceId: task.workspaceId,
-            relatedProjectId: task.projectId,
-            relatedTaskId: task._id,
-          });
-          io.to(`user:${u._id}`).emit("notification:new", { title: "Deadline approaching" });
-
-          if (u.notificationPreferences?.deadlines !== false && task.dueDate) {
-            const { subject, html } = taskDueSoonEmail({
-              taskTitle: task.title,
-              projectName: (task.projectId as unknown as { name: string })?.name || "your project",
-              dueDate: task.dueDate,
-              taskUrl,
+          for (const u of users) {
+            await Notification.create({
+              userId: u._id,
+              type: "deadline",
+              title: "Deadline approaching",
+              message: `"${task.title}" is due soon`,
+              relatedWorkspaceId: task.workspaceId,
+              relatedProjectId: task.projectId,
+              relatedTaskId: task._id,
             });
-            sendMail(u.email, subject, html).catch(() => {});
-          }
-        }
+            io.to(`user:${u._id}`).emit("notification:new", { title: "Deadline approaching" });
 
-        task.dueReminderSentAt = new Date();
-        await task.save();
+            if (u.notificationPreferences?.deadlines !== false && task.dueDate) {
+              const { subject, html } = taskDueSoonEmail({
+                taskTitle: task.title,
+                projectName: (task.projectId as unknown as { name: string })?.name || "your project",
+                dueDate: task.dueDate,
+                taskUrl,
+              });
+              sendMail(u.email, subject, html).catch(() => {});
+            }
+          }
+
+          // updateOne (not task.save()) so this only touches dueReminderSentAt and
+          // doesn't re-validate the whole document -- older documents created before
+          // a schema field was added/required shouldn't be able to block this job.
+          await Task.updateOne({ _id: task._id }, { $set: { dueReminderSentAt: new Date() } });
+        } catch (taskErr) {
+          // One bad/legacy task should never stop the rest of the batch from being reminded.
+          console.error(`[due-reminder] Skipped task ${task._id}:`, taskErr);
+        }
       }
 
       if (dueSoonTasks.length) {

@@ -8,10 +8,23 @@ const transporter = nodemailer.createTransport({
   auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } : undefined,
 });
 
-export async function sendMail(to: string, subject: string, html: string) {
+export interface MailOptions {
+  ics?: string; // calendar invite content, attached as text/calendar
+  icsMethod?: "REQUEST" | "CANCEL";
+}
+
+export async function sendMail(to: string, subject: string, html: string, options?: MailOptions) {
   if (!env.SMTP_HOST) {
     console.warn(`[mailer] SMTP not configured, skipping email to ${to}: ${subject}`);
     return;
   }
-  await transporter.sendMail({ from: env.SMTP_FROM, to, subject, html });
+  await transporter.sendMail({
+    from: env.SMTP_FROM,
+    to,
+    subject,
+    html,
+    ...(options?.ics
+      ? { icalEvent: { method: options.icsMethod || "REQUEST", content: options.ics } }
+      : {}),
+  });
 }

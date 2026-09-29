@@ -11,6 +11,7 @@ import {
   Shield,
   Users,
   ListChecks,
+  CalendarDays,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -31,6 +32,7 @@ const navItems = [
   { to: "projects", label: "Projects", icon: FolderKanban },
   { to: "tasks", label: "Tasks", icon: ListChecks },
   { to: "my-tasks", label: "My Tasks", icon: CheckSquare },
+  { to: "calendar", label: "Calendar", icon: CalendarDays },
   { to: "chat", label: "Team Chat", icon: MessageSquare },
   { to: "team", label: "Team", icon: Users },
   { to: "analytics", label: "Analytics", icon: BarChart3 },

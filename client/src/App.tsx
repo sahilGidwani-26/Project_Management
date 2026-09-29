@@ -7,7 +7,6 @@ import { ProtectedRoute, AdminRoute } from "@/routes/ProtectedRoute";
 import WorkspaceIndex from "@/routes/WorkspaceIndex";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
-import Tasks from "@/pages/Tasks";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/auth/Login";
@@ -16,6 +15,8 @@ import ForgotPassword from "@/pages/auth/ForgotPassword";
 import Onboarding from "@/pages/Onboarding";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
+import Tasks from "@/pages/Tasks";
+import CalendarPage from "@/pages/Calendar";
 import ProjectLayout from "@/pages/ProjectLayout";
 import ProjectBoardPage from "@/pages/ProjectBoardPage";
 import ProjectListPage from "@/pages/ProjectListPage";
@@ -54,9 +55,10 @@ export default function App() {
                 <Route path="/app" element={<WorkspaceIndex />} />
 
                 <Route path="/app/:workspaceId" element={<AppLayout />}>
-                                  <Route path="tasks" element={<Tasks />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="projects" element={<Projects />} />
+                  <Route path="tasks" element={<Tasks />} />
+                  <Route path="calendar" element={<CalendarPage />} />
                   <Route path="projects/:projectId" element={<ProjectLayout />}>
                     <Route index element={<Navigate to="board" replace />} />
                     <Route path="board" element={<ProjectBoardPage />} />

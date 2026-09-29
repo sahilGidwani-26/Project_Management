@@ -7,7 +7,10 @@ export type NotificationType =
   | "deadline"
   | "task_completed"
   | "project_updated"
-  | "workspace_invite";
+  | "workspace_invite"
+  | "meeting_invite"
+  | "meeting_updated"
+  | "meeting_cancelled";
 
 export interface INotification extends Document {
   _id: Types.ObjectId;
