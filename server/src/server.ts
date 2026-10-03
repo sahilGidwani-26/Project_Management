@@ -4,6 +4,7 @@ import { createApp } from "./app";
 import { connectDB } from "./config/db";
 import { initSocket } from "./sockets";
 import { startDueDateReminderJob } from "./jobs/dueDateReminder";
+import { startProjectJobs } from "./jobs/projectJobs";
 import { env } from "./config/env";
 
 async function bootstrap() {
@@ -16,6 +17,7 @@ async function bootstrap() {
   app.set("io", io);
 
   startDueDateReminderJob(io);
+  startProjectJobs();
 
   httpServer.listen(env.PORT, () => {
     console.log(`[server] Running on http://localhost:${env.PORT} (${env.NODE_ENV})`);

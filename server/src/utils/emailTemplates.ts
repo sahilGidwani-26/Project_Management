@@ -8,7 +8,7 @@ export const esc = (s: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const wrap = (title: string, bodyHtml: string, ctaUrl?: string, ctaLabel?: string) => `
+export const wrap = (title: string, bodyHtml: string, ctaUrl?: string, ctaLabel?: string) => `
   <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
     <div style="padding: 24px 0 8px;">
       <span style="font-size: 18px; font-weight: 700; color: #0f766e;">Flowbase</span>

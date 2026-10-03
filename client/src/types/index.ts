@@ -26,8 +26,9 @@ export interface WorkspaceMember {
   status: string;
 }
 
-export type ProjectStatus = "Planning" | "Active" | "On Hold" | "Completed" | "Archived";
+export type ProjectStatus = "Planning" | "Active" | "On Hold" | "Completed" | "Cancelled" | "Archived";
 export type Priority = "Low" | "Medium" | "High" | "Urgent";
+export type ProjectRole = "ADMIN" | "MEMBER" | "VIEWER";
 
 export interface Project {
   _id: string;
@@ -37,13 +38,44 @@ export interface Project {
   description?: string;
   managerId?: User;
   members: User[];
+  memberRoles?: { userId: User; role: ProjectRole }[];
   status: ProjectStatus;
   priority: Priority;
   startDate?: string;
   endDate?: string;
   color: string;
+  icon?: string;
+  coverImage?: string;
+  category?: string;
+  tags?: string[];
+  clientName?: string;
+  budget?: number;
+  currency?: string;
+  visibility?: "public" | "private";
   progress: number;
+  isFavorite?: boolean;
+  myRole?: ProjectRole;
+  taskStats?: { total: number; done: number; overdue: number };
   createdAt: string;
+}
+
+export interface ProjectStats {
+  total: number;
+  completed: number;
+  inProgress: number;
+  overdue: number;
+  pending: number;
+  milestones: { total: number; done: number };
+  openRisks: number;
+}
+
+export interface ProjectTemplateInfo {
+  id: string;
+  name: string;
+  description?: string;
+  custom: boolean;
+  milestoneCount: number;
+  taskCount: number;
 }
 
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
@@ -137,4 +169,124 @@ export interface ApiResponse<T> {
   success: boolean;
   message: string;
   data: T;
+}
+
+/* ------------------------- Project module additions ------------------------- */
+
+export interface Milestone {
+  _id: string;
+  title: string;
+  description?: string;
+  dueDate?: string;
+  status: "Open" | "Completed";
+  taskIds: string[];
+  tasks: Pick<Task, "_id" | "title" | "status" | "taskNumber" | "dueDate">[];
+  taskTotal: number;
+  taskDone: number;
+  progress: number;
+}
+
+export interface Sprint {
+  _id: string;
+  name: string;
+  goal?: string;
+  startDate?: string;
+  endDate?: string;
+  status: "Planned" | "Active" | "Completed";
+  taskIds: string[];
+  committed: number;
+  velocity: number;
+}
+
+export interface TimeEntry {
+  _id: string;
+  userId: Pick<User, "_id" | "name" | "profileImage">;
+  taskId?: { _id: string; title: string; taskNumber: number };
+  minutes: number;
+  note?: string;
+  date: string;
+  billable: boolean;
+}
+
+export interface RiskIssue {
+  _id: string;
+  type: "Risk" | "Issue";
+  title: string;
+  description?: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  probability: "Low" | "Medium" | "High";
+  status: "Open" | "Mitigating" | "Resolved" | "Closed";
+  ownerId?: Pick<User, "_id" | "name" | "profileImage">;
+  mitigation?: string;
+  dueDate?: string;
+  createdAt: string;
+}
+
+export interface ProjectComment {
+  _id: string;
+  userId: Pick<User, "_id" | "name" | "profileImage">;
+  content: string;
+  mentions: { _id: string; name: string }[];
+  pinned: boolean;
+  editedAt?: string;
+  createdAt: string;
+}
+
+export interface ProjectFile {
+  _id: string;
+  uploadedBy: Pick<User, "_id" | "name" | "profileImage">;
+  fileName: string;
+  fileType?: string;
+  fileSize?: number;
+  createdAt: string;
+}
+
+export interface TaskDependency {
+  _id: string;
+  taskId: string;
+  dependsOnTaskId: string;
+}
+
+export interface AutomationRule {
+  _id: string;
+  name: string;
+  active: boolean;
+  triggerType: "task_created" | "task_status_changed" | "task_assigned";
+  triggerStatus?: string;
+  actionType: "notify_assignees" | "notify_manager" | "set_priority" | "add_label" | "move_status" | "assign_user";
+  actionValue?: string;
+  runCount: number;
+  lastRunAt?: string;
+}
+
+export interface RecurringTask {
+  _id: string;
+  title: string;
+  description?: string;
+  priority: Priority;
+  assigneeIds: Pick<User, "_id" | "name" | "profileImage">[];
+  frequency: "daily" | "weekly" | "monthly";
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  dueInDays: number;
+  nextRunAt: string;
+  active: boolean;
+}
+
+export interface ActivityItem {
+  _id: string;
+  action: string;
+  actorId?: Pick<User, "_id" | "name" | "profileImage">;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+export interface ProjectReports {
+  summary: { total: number; done: number; overdue: number; completionRate: number; estimatedMinutes: number; loggedMinutes: number; avgCompletionDays: number };
+  statusCounts: Record<string, number>;
+  priorityCounts: Record<string, number>;
+  workload: { user: Pick<User, "_id" | "name" | "profileImage">; open: number; done: number; overdue: number; estimatedMinutes: number; loggedMinutes: number }[];
+  burndown: { date: string; remaining: number | null; ideal: number }[];
+  trend: { date: string; created: number; completed: number }[];
+  timeByUser: { _id: string; name?: string; minutes: number; billable: number }[];
 }

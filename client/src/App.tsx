@@ -20,6 +20,18 @@ import CalendarPage from "@/pages/Calendar";
 import ProjectLayout from "@/pages/ProjectLayout";
 import ProjectBoardPage from "@/pages/ProjectBoardPage";
 import ProjectListPage from "@/pages/ProjectListPage";
+import ProjectOverview from "@/pages/project/ProjectOverview";
+import ProjectTimeline from "@/pages/project/ProjectTime";
+import ProjectCalendar from "@/pages/project/ProjectCalendar";
+import ProjectSprints from "@/pages/project/ProjectSprints";
+import ProjectFiles from "@/pages/project/ProjectFiles";
+import ProjectDiscussion from "@/pages/project/ProjectDiscussion";
+import ProjectMembers from "@/pages/project/ProjectMembers";
+import ProjectReports from "@/pages/project/ProjectReports";
+import ProjectTime from "@/pages/project/ProjectTime";
+import ProjectRisks from "@/pages/project/ProjectRisks";
+import ProjectAutomation from "@/pages/project/ProjectAutomation";
+import ProjectSettings from "@/pages/project/ProjectSettings";
 import MyTasks from "@/pages/MyTasks";
 import Chat from "@/pages/Chat";
 import Analytics from "@/pages/Analytics";
@@ -60,9 +72,21 @@ export default function App() {
                   <Route path="tasks" element={<Tasks />} />
                   <Route path="calendar" element={<CalendarPage />} />
                   <Route path="projects/:projectId" element={<ProjectLayout />}>
-                    <Route index element={<Navigate to="board" replace />} />
+                    <Route index element={<Navigate to="overview" replace />} />
+                    <Route path="overview" element={<ProjectOverview />} />
                     <Route path="board" element={<ProjectBoardPage />} />
                     <Route path="list" element={<ProjectListPage />} />
+                    <Route path="timeline" element={<ProjectTimeline />} />
+                    <Route path="calendar" element={<ProjectCalendar />} />
+                    <Route path="sprints" element={<ProjectSprints />} />
+                    <Route path="files" element={<ProjectFiles />} />
+                    <Route path="discussion" element={<ProjectDiscussion />} />
+                    <Route path="members" element={<ProjectMembers />} />
+                    <Route path="reports" element={<ProjectReports />} />
+                    <Route path="time" element={<ProjectTime />} />
+                    <Route path="risks" element={<ProjectRisks />} />
+                    <Route path="automation" element={<ProjectAutomation />} />
+                    <Route path="settings" element={<ProjectSettings />} />
                   </Route>
                   <Route path="my-tasks" element={<MyTasks />} />
                   <Route path="chat" element={<Chat />} />

@@ -21,4 +21,8 @@ const timeEntrySchema = new Schema<ITimeEntry>(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
-export const TimeEntry = model<ITimeEntry>("TimeEntry", timeEntrySchema);
+export const TimeEntry = model<ITimeEntry>(
+  "TimerEntry",
+  timeEntrySchema,
+  "timerentries"
+);

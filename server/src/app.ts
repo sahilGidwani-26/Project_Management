@@ -13,6 +13,7 @@ export function createApp(): Application {
     cors({
       origin: env.CLIENT_URL,
       credentials: true,
+      exposedHeaders: ["Content-Disposition"],
     })
   );
   app.use(express.json({ limit: "5mb" }));

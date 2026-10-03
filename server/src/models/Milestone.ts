@@ -1,4 +1,4 @@
-import { Schema, model, Document, Types } from "mongoose";
+import mongoose, { Schema, Model, Document, Types } from "mongoose";
 
 export interface IMilestone extends Document {
   _id: Types.ObjectId;
@@ -23,4 +23,6 @@ const milestoneSchema = new Schema<IMilestone>(
   { timestamps: true }
 );
 
-export const Milestone = model<IMilestone>("Milestone", milestoneSchema);
+export const Milestone: Model<IMilestone> =
+  (mongoose.models.Milestone as Model<IMilestone>) ||
+  mongoose.model<IMilestone>("Milestone", milestoneSchema);
