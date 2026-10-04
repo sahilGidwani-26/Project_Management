@@ -3,18 +3,28 @@ import { catchAsync } from "../utils/catchAsync";
 import { ApiError } from "../utils/ApiError";
 import { sendSuccess, sendPaginated } from "../utils/ApiResponse";
 import { Task } from "../models/Task";
+import { Project } from "../models/Project";
 import { Notification } from "../models/Notification";
 import { ActivityLog } from "../models/ActivityLog";
 import { User } from "../models/User";
 import { WorkspaceMember } from "../models/WorkspaceMember";
 import { sendMail } from "../utils/mailer";
 import { taskAssignedEmail, buildTaskUrl } from "../utils/emailTemplates";
+import { bugReportedEmail } from "../utils/projectEmailTemplates";
 import { getNextSequence } from "../utils/counter";
+import { projectLeads, sendToUsers } from "../services/projectEvents";
+import { getBlockers, runAutomations } from "../services/automation";
 import { Server as SocketIOServer } from "socket.io";
 
 function getIO(req: Request): SocketIOServer {
   return req.app.get("io");
 }
+
+/** Fields a client is allowed to change through PATCH /tasks/:id (everything else is ignored). */
+const UPDATABLE = [
+  "title", "description", "assigneeIds", "priority", "startDate", "dueDate", "labels",
+  "estimatedMinutes", "milestoneId", "type", "bugDetails", "status", "order",
+];
 
 async function notifyAssignees(params: {
   req: Request;
@@ -22,7 +32,7 @@ async function notifyAssignees(params: {
   taskId: string;
   taskTitle: string;
   workspaceId: string;
-  projectId: string;
+  projectId?: string;
   projectName: string;
   assignedByName: string;
   dueDate?: Date;
@@ -42,7 +52,7 @@ async function notifyAssignees(params: {
         title: "New task assigned",
         message: `You were assigned to "${params.taskTitle}"`,
         relatedWorkspaceId: params.workspaceId,
-        relatedProjectId: params.projectId,
+        relatedProjectId: params.projectId || undefined,
         relatedTaskId: params.taskId,
       });
       params.req.app.get("io").to(`user:${u._id}`).emit("notification:new", { title: "New task assigned" });
@@ -61,6 +71,31 @@ async function notifyAssignees(params: {
   );
 }
 
+/** Critical bug -> email the project leads (manager, creator, project admins). Never throws. */
+async function alertCriticalBug(task: any, actorId: string) {
+  try {
+    if (task.type !== "Bug" || task.bugDetails?.severity !== "Critical" || !task.projectId) return;
+    const projectId = String(task.projectId._id ?? task.projectId);
+    const project = await Project.findById(projectId);
+    if (!project) return;
+    const byName = (await User.findById(actorId).select("name"))?.name || "Someone";
+    const url = buildTaskUrl(String(task.workspaceId), projectId, String(task._id));
+    void sendToUsers(projectLeads(project), actorId, () =>
+      bugReportedEmail({
+        title: task.title,
+        severity: "Critical",
+        projectName: project.name,
+        byName,
+        environment: task.bugDetails?.environment,
+        steps: task.bugDetails?.stepsToReproduce,
+        url,
+      })
+    );
+  } catch (e) {
+    console.warn("[bug-alert] failed:", (e as Error).message);
+  }
+}
+
 export const createTask = catchAsync(async (req: Request, res: Response) => {
   const {
     workspaceId,
@@ -74,6 +109,8 @@ export const createTask = catchAsync(async (req: Request, res: Response) => {
     dueDate,
     labels,
     subtasks,
+    type,
+    bugDetails,
   } = req.body as {
     workspaceId: string;
     projectId?: string;
@@ -86,6 +123,8 @@ export const createTask = catchAsync(async (req: Request, res: Response) => {
     dueDate?: string;
     labels?: string[];
     subtasks?: string[];
+    type?: string;
+    bugDetails?: Record<string, unknown>;
   };
 
   const orderScope = projectId ? { projectId, status } : { workspaceId, projectId: { $exists: false }, status };
@@ -93,11 +132,14 @@ export const createTask = catchAsync(async (req: Request, res: Response) => {
   const order = (lastTask?.order ?? 0) + 1;
 
   const taskNumber = await getNextSequence(`task:${workspaceId}`);
+  const isBug = type === "Bug";
 
   const task = await Task.create({
     workspaceId,
     projectId: projectId || undefined,
     taskNumber,
+    type: type || "Task",
+    bugDetails: isBug ? bugDetails : undefined,
     title,
     description,
     assigneeIds: assigneeIds || [],
@@ -158,6 +200,9 @@ export const createTask = catchAsync(async (req: Request, res: Response) => {
     metadata: { title },
   });
 
+  void alertCriticalBug(task, req.user!.id);
+  void runAutomations("task_created", task, req.user!.id);
+
   const populated = await Task.findById(task._id)
     .populate("assigneeIds", "name profileImage")
     .populate("reporterId", "name profileImage")
@@ -181,6 +226,8 @@ export const listTasks = catchAsync(async (req: Request, res: Response) => {
     label,
     search,
     sort,
+    type,
+    severity,
   } = req.query as Record<string, string>;
 
   const isValidObjectId = (v?: string) => !!v && /^[0-9a-fA-F]{24}$/.test(v);
@@ -205,6 +252,10 @@ export const listTasks = catchAsync(async (req: Request, res: Response) => {
   if (priority) filter.priority = priority;
   if (label) filter.labels = label;
   if (search) filter.$text = { $search: search };
+  // Older tasks have no `type` field at all, so "Task" must also match a missing type.
+  if (type === "Task") filter.type = { $in: ["Task", null] };
+  else if (type) filter.type = type;
+  if (severity) filter["bugDetails.severity"] = severity;
 
   const sortMap: Record<string, Record<string, 1 | -1>> = {
     dueDate: { dueDate: 1 },
@@ -242,14 +293,26 @@ export const updateTask = catchAsync(async (req: Request, res: Response) => {
   const previous = await Task.findById(req.params.taskId);
   if (!previous) throw ApiError.notFound("Task not found");
 
-  const task = await Task.findByIdAndUpdate(req.params.taskId, req.body, { new: true })
+  const patch: Record<string, unknown> = {};
+  UPDATABLE.forEach((k) => {
+    if (k in req.body) patch[k] = req.body[k];
+  });
+
+  const statusChanged = typeof patch.status === "string" && patch.status !== previous.status;
+  if (statusChanged) {
+    const blockers = await getBlockers(String(previous._id), patch.status as string);
+    if (blockers.length) throw ApiError.badRequest(`Blocked by: ${blockers.join(", ")}`);
+  }
+
+  const task = await Task.findByIdAndUpdate(req.params.taskId, patch, { new: true, runValidators: true })
     .populate("assigneeIds", "name profileImage")
     .populate("reporterId", "name profileImage");
   if (!task) throw ApiError.notFound("Task not found");
 
-  if (req.body.assigneeIds) {
+  let newlyAdded: string[] = [];
+  if (patch.assigneeIds) {
     const before = new Set(previous.assigneeIds.map(String));
-    const newlyAdded = (req.body.assigneeIds as string[]).filter((id) => !before.has(id));
+    newlyAdded = (patch.assigneeIds as string[]).filter((id) => !before.has(String(id))).map(String);
     if (newlyAdded.length) {
       const project = await task.populate<{ projectId: { name: string } }>("projectId", "name");
       const actor = await User.findById(req.user!.id).select("name");
@@ -268,12 +331,21 @@ export const updateTask = catchAsync(async (req: Request, res: Response) => {
     }
   }
 
+  const wasCritical = previous.type === "Bug" && previous.bugDetails?.severity === "Critical";
+  if (!wasCritical) void alertCriticalBug(task, req.user!.id);
+  if (statusChanged) void runAutomations("task_status_changed", task, req.user!.id);
+  if (newlyAdded.length) void runAutomations("task_assigned", task, req.user!.id);
+
   getIO(req).to(`project:${task.projectId || "none"}`).emit("task:updated", task);
   return sendSuccess(res, 200, task, "Task updated");
 });
 
 export const updateTaskStatus = catchAsync(async (req: Request, res: Response) => {
   const { status, order } = req.body;
+
+  const blockers = await getBlockers(req.params.taskId, status);
+  if (blockers.length) throw ApiError.badRequest(`Blocked by: ${blockers.join(", ")}`);
+
   const task = await Task.findByIdAndUpdate(
     req.params.taskId,
     { status, ...(order !== undefined ? { order } : {}) },
@@ -316,6 +388,8 @@ export const updateTaskStatus = catchAsync(async (req: Request, res: Response) =
     });
     getIO(req).to(`project:${task.projectId || "none"}`).emit("task:created", nextTask);
   }
+
+  void runAutomations("task_status_changed", task, req.user!.id);
 
   return sendSuccess(res, 200, task, "Task status updated");
 });

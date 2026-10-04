@@ -106,6 +106,8 @@ export interface Task {
   estimatedMinutes?: number;
   actualMinutes?: number;
   createdAt: string;
+  type?: TaskType;
+  bugDetails?: BugDetails;
 }
 
 export interface Comment {
@@ -289,4 +291,17 @@ export interface ProjectReports {
   burndown: { date: string; remaining: number | null; ideal: number }[];
   trend: { date: string; created: number; completed: number }[];
   timeByUser: { _id: string; name?: string; minutes: number; billable: number }[];
+}
+
+export type TaskType = "Task" | "Bug" | "Feature" | "Improvement";
+export type BugSeverity = "Minor" | "Major" | "Critical";
+
+export interface BugDetails {
+  severity?: BugSeverity;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  environment?: string;
+  foundInVersion?: string;
+  fixedInVersion?: string;
 }

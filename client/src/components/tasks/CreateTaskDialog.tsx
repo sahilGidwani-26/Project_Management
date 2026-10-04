@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, X, FolderKanban } from "lucide-react";
 import { api, apiError } from "@/lib/api";
-import { TaskStatus, Project } from "@/types";
+import { TaskStatus, TaskType, BugSeverity, Project } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AssigneeMultiSelect } from "./AssigneeMultiSelect";
 import { toast } from "sonner";
+
+const TYPES: TaskType[] = ["Task", "Bug", "Feature", "Improvement"];
+const SEVERITIES: BugSeverity[] = ["Minor", "Major", "Critical"];
 
 function invalidateAllTaskLists(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({
@@ -25,18 +28,21 @@ export function CreateTaskDialog({
   workspaceId,
   projectId, // if provided, project is locked (e.g. opened from a project's Kanban board); otherwise the user picks one, or none
   defaultStatus = "Todo",
+  defaultType = "Task",
   open,
   onOpenChange,
 }: {
   workspaceId: string;
   projectId?: string;
   defaultStatus?: TaskStatus;
+  defaultType?: TaskType;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [type, setType] = useState<TaskType>(defaultType);
   const [priority, setPriority] = useState("Medium");
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projectId || "none");
@@ -47,7 +53,16 @@ export function CreateTaskDialog({
   const [subtaskDraft, setSubtaskDraft] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // bug-only fields
+  const [severity, setSeverity] = useState<BugSeverity>("Major");
+  const [steps, setSteps] = useState("");
+  const [expected, setExpected] = useState("");
+  const [actual, setActual] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const [foundIn, setFoundIn] = useState("");
+
   const isProjectLocked = !!projectId;
+  const isBug = type === "Bug";
 
   const { data: projects } = useQuery({
     queryKey: ["projects-picker", workspaceId],
@@ -64,6 +79,7 @@ export function CreateTaskDialog({
   const reset = () => {
     setTitle("");
     setDescription("");
+    setType(defaultType);
     setAssigneeIds([]);
     setSubtasks([]);
     setSubtaskDraft("");
@@ -71,6 +87,12 @@ export function CreateTaskDialog({
     setDueDate("");
     setStatus(defaultStatus);
     setSelectedProjectId(projectId || "none");
+    setSeverity("Major");
+    setSteps("");
+    setExpected("");
+    setActual("");
+    setEnvironment("");
+    setFoundIn("");
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -78,11 +100,26 @@ export function CreateTaskDialog({
     setLoading(true);
     try {
       const finalProjectId = selectedProjectId === "none" ? undefined : selectedProjectId;
+      const bugDetails = isBug
+        ? Object.fromEntries(
+            Object.entries({
+              severity,
+              stepsToReproduce: steps.trim(),
+              expectedResult: expected.trim(),
+              actualResult: actual.trim(),
+              environment: environment.trim(),
+              foundInVersion: foundIn.trim(),
+            }).filter(([, v]) => v !== "")
+          )
+        : undefined;
+
       await api.post("/tasks", {
         workspaceId,
         projectId: finalProjectId,
         title,
         description,
+        type,
+        bugDetails,
         status,
         priority,
         assigneeIds,
@@ -93,7 +130,7 @@ export function CreateTaskDialog({
       invalidateAllTaskLists(qc);
       onOpenChange(false);
       reset();
-      toast.success("Task created");
+      toast.success(isBug ? "Bug reported" : "Task created");
     } catch (err) {
       toast.error(apiError(err));
     } finally {
@@ -105,33 +142,88 @@ export function CreateTaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto scrollbar-thin">
         <DialogHeader>
-          <DialogTitle>New task</DialogTitle>
+          <DialogTitle>{isBug ? "Report a bug" : "New task"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="title">Title</Label>
-            <Input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Design the login screen" autoFocus />
+            <Input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder={isBug ? "Login button does nothing on Safari" : "Design the login screen"} autoFocus />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Project</Label>
-            {isProjectLocked ? (
-              <div className="flex items-center gap-2 rounded-md border border-input bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
-                <FolderKanban className="h-4 w-4" />
-                This task belongs to the current project
-              </div>
-            ) : (
-              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={(v) => setType(v as TaskType)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No project</SelectItem>
-                  {projects?.map((p) => (
-                    <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>
+                  {TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{t === "Bug" ? "🐛 Bug" : t}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Project</Label>
+              {isProjectLocked ? (
+                <div className="flex h-10 items-center gap-2 rounded-md border border-input bg-secondary/40 px-3 text-sm text-muted-foreground">
+                  <FolderKanban className="h-4 w-4 shrink-0" />
+                  <span className="truncate">Current project</span>
+                </div>
+              ) : (
+                <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                  <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project</SelectItem>
+                    {projects?.map((p) => (
+                      <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
+
+          {isBug && (
+            <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+              <p className="text-xs font-medium text-red-600">Bug details</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Severity</Label>
+                  <Select value={severity} onValueChange={(v) => setSeverity(v as BugSeverity)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SEVERITIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Found in version</Label>
+                  <Input value={foundIn} onChange={(e) => setFoundIn(e.target.value)} placeholder="v1.3.0" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Steps to reproduce</Label>
+                <Textarea value={steps} onChange={(e) => setSteps(e.target.value)} placeholder={"1. Open the login page\n2. Enter valid details\n3. Click Login"} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Expected result</Label>
+                  <Textarea value={expected} onChange={(e) => setExpected(e.target.value)} className="min-h-[60px]" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Actual result</Label>
+                  <Textarea value={actual} onChange={(e) => setActual(e.target.value)} className="min-h-[60px]" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Environment</Label>
+                <Input value={environment} onChange={(e) => setEnvironment(e.target.value)} placeholder="Chrome 126, Windows 11" />
+              </div>
+              {severity === "Critical" && (
+                <p className="text-xs text-muted-foreground">Critical bugs email the project leads right away.</p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="description">Description</Label>
@@ -216,7 +308,7 @@ export function CreateTaskDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={loading || !title}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Create task
+              {isBug ? "Report bug" : "Create task"}
             </Button>
           </DialogFooter>
         </form>

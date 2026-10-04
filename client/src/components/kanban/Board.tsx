@@ -2,7 +2,8 @@ import { useMemo, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
+import { toast } from "sonner";
 import { Task, TaskStatus } from "@/types";
 import { Column } from "./Column";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -68,6 +69,9 @@ export function Board() {
 
     try {
       await api.patch(`/tasks/${draggableId}/status`, { status: newStatus, order: destination.index });
+    } catch (err) {
+      // e.g. "Blocked by TASK-3 Design login" -> show why the card jumped back
+      toast.error(apiError(err));
     } finally {
       qc.invalidateQueries({ queryKey: ["tasks", projectId] });
     }

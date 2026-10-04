@@ -2,12 +2,26 @@ import { Schema, model, Document, Types } from "mongoose";
 
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 export type Priority = "Low" | "Medium" | "High" | "Urgent";
+export type TaskType = "Task" | "Bug" | "Feature" | "Improvement";
+export type BugSeverity = "Minor" | "Major" | "Critical";
+
+export interface IBugDetails {
+  severity?: BugSeverity;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  environment?: string;
+  foundInVersion?: string;
+  fixedInVersion?: string;
+}
 
 export interface ITask extends Document {
   _id: Types.ObjectId;
   workspaceId: Types.ObjectId;
   projectId?: Types.ObjectId;
   taskNumber: number;
+  type: TaskType;
+  bugDetails?: IBugDetails;
   title: string;
   description?: string;
   assigneeIds: Types.ObjectId[];
@@ -40,6 +54,16 @@ const taskSchema = new Schema<ITask>(
     workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
     projectId: { type: Schema.Types.ObjectId, ref: "Project", index: true }, // optional: tasks can exist without a project
     taskNumber: { type: Number, required: true, index: true },
+    type: { type: String, enum: ["Task", "Bug", "Feature", "Improvement"], default: "Task" },
+    bugDetails: {
+      severity: { type: String, enum: ["Minor", "Major", "Critical"] },
+      stepsToReproduce: String,
+      expectedResult: String,
+      actualResult: String,
+      environment: String,
+      foundInVersion: String,
+      fixedInVersion: String,
+    },
     title: { type: String, required: true, trim: true },
     description: String,
     assigneeIds: [{ type: Schema.Types.ObjectId, ref: "User", index: true }],
@@ -68,6 +92,7 @@ const taskSchema = new Schema<ITask>(
 );
 
 taskSchema.index({ projectId: 1, status: 1 });
+taskSchema.index({ projectId: 1, type: 1 });
 taskSchema.index({ workspaceId: 1, taskNumber: 1 }, { unique: true });
 taskSchema.index({ title: "text", description: "text" });
 

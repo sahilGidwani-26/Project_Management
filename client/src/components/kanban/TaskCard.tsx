@@ -20,6 +20,11 @@ export function TaskCard({ task, index, onClick, dragDisabled }: { task: Task; i
             snapshot.isDragging && "shadow-lg ring-2 ring-primary/40"
           )}
         >
+          {task.type === "Bug" && (
+            <span className="mb-2 inline-flex items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
+              🐛 Bug{task.bugDetails?.severity ? ` · ${task.bugDetails.severity}` : ""}
+            </span>
+          )}
           {!!task.labels?.length && (
             <div className="mb-2 flex flex-wrap gap-1">
               {task.labels.slice(0, 3).map((l) => (

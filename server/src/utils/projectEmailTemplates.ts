@@ -110,3 +110,19 @@ export const riskEmail = (p: { kind: "raised" | "assigned" | "resolved"; type: s
 
 export const automationEmail = (p: { ruleName: string; projectName: string; taskTitle: string; message: string; url: string }) =>
   mail(`${p.projectName}: ${p.taskTitle}`, "Automation notification", `An automation rule (${b(p.ruleName)}) fired in ${b(p.projectName)}:`, p.taskTitle, [], box(p.message), p.url, "View task");
+
+
+export const bugReportedEmail = (p: { title: string; severity: string; projectName: string; byName: string; environment?: string; steps?: string; url: string }) => {
+  const rows: [string, string][] = [["Severity", p.severity]];
+  if (p.environment) rows.push(["Environment", p.environment]);
+  return mail(
+    `${p.severity} bug: "${p.title}"`,
+    "Critical bug reported",
+    `${b(p.byName)} reported a ${p.severity.toLowerCase()} bug in ${b(p.projectName)}:`,
+    p.title,
+    rows,
+    p.steps ? box(`Steps to reproduce:\n${p.steps}`) : "",
+    p.url,
+    "View bug"
+  );
+};
