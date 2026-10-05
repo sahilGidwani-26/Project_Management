@@ -1,10 +1,10 @@
 import { Project } from "../models/Project";
-import { Milestone, RecurringTask } from "../models/ProjectExtras";
 import { projectLeads, projectRecipients, sendToUsers } from "../services/projectEvents";
 import { createTasksBulk, nextRun } from "../services/projectOps";
 import { runAutomations } from "../services/automation";
-import { buildProjectUrl, milestoneEmail, projectDeadlineEmail } from "../utils/projectEmailTemplates";
 import { buildTaskUrl, taskAssignedEmail } from "../utils/emailTemplates";
+import { Milestone, RecurringTask, Release } from "../models/ProjectExtras";
+import { buildProjectUrl, milestoneEmail, projectDeadlineEmail, releaseEmail } from "../utils/projectEmailTemplates";
 
 const DAY = 864e5;
 const OPEN = ["Planning", "Active", "On Hold"];
@@ -16,12 +16,44 @@ export function startProjectJobs() {
 }
 
 async function run() {
-  for (const job of [projectDeadlines, milestoneDeadlines, recurringTasks]) {
+    for (const job of [projectDeadlines, milestoneDeadlines, recurringTasks, releaseDeadlines]) {
     try {
       await job();
     } catch (e) {
       console.warn(`[projectJobs] ${job.name} failed:`, (e as Error).message);
     }
+  }
+}
+
+
+async function releaseDeadlines() {
+  const now = new Date();
+  const soon = new Date(+now + 2 * DAY);
+  const cache = new Map<string, any>();
+  const projectOf = async (id: any) => {
+    const k = String(id);
+    if (!cache.has(k)) cache.set(k, await Project.findById(id));
+    return cache.get(k);
+  };
+
+  const dueSoon: any[] = await Release.find({ status: "Planned", plannedDate: { $gte: now, $lte: soon }, dueSoonSentAt: null });
+  for (const rel of dueSoon) {
+    const p = await projectOf(rel.projectId);
+    await Release.updateOne({ _id: rel._id }, { dueSoonSentAt: now });
+    if (p && OPEN.includes(p.status))
+      void sendToUsers(projectRecipients(p), undefined, () =>
+        releaseEmail({ kind: "dueSoon", projectName: p.name, name: rel.name, plannedDate: rel.plannedDate, url: buildProjectUrl(p.workspaceId, p._id, "releases") })
+      );
+  }
+
+  const overdue: any[] = await Release.find({ status: "Planned", plannedDate: { $lt: now }, overdueSentAt: null });
+  for (const rel of overdue) {
+    const p = await projectOf(rel.projectId);
+    await Release.updateOne({ _id: rel._id }, { overdueSentAt: now });
+    if (p && OPEN.includes(p.status))
+      void sendToUsers(projectLeads(p), undefined, () =>
+        releaseEmail({ kind: "overdue", projectName: p.name, name: rel.name, plannedDate: rel.plannedDate, url: buildProjectUrl(p.workspaceId, p._id, "releases") })
+      );
   }
 }
 

@@ -34,6 +34,7 @@ export interface ITask extends Document {
   actualMinutes?: number;
   labels: string[];
   milestoneId?: Types.ObjectId;
+  releaseId?: Types.ObjectId;
   parentTaskId?: Types.ObjectId;
   dependencies: Types.ObjectId[];
   order: number;
@@ -76,6 +77,7 @@ const taskSchema = new Schema<ITask>(
     actualMinutes: { type: Number, default: 0 },
     labels: [String],
     milestoneId: { type: Schema.Types.ObjectId, ref: "Milestone" },
+    releaseId: { type: Schema.Types.ObjectId, ref: "ProjectRelease", index: true },
     parentTaskId: { type: Schema.Types.ObjectId, ref: "Task", index: true },
     dependencies: [{ type: Schema.Types.ObjectId, ref: "Task" }],
     order: { type: Number, default: 0 },

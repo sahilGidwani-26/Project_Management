@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, Pencil, Check } from "lucide-react";
 import { api, apiError } from "@/lib/api";
-import { Task, TaskType, BugSeverity } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -16,6 +14,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { AssigneeMultiSelect } from "./AssigneeMultiSelect";
 import { SubtasksSection } from "./SubtasksSection";
 import { TaskDiscussion } from "./TaskDiscussion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Task, TaskType, BugSeverity, Release } from "@/types";
 
 const TYPES: TaskType[] = ["Task", "Bug", "Feature", "Improvement"];
 const SEVERITIES: BugSeverity[] = ["Minor", "Major", "Critical"];
@@ -27,6 +27,13 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
   const [status, setStatus] = useState(task.status);
   const [priority, setPriority] = useState(task.priority);
   const [type, setType] = useState<TaskType>(task.type || "Task");
+  const [releaseId, setReleaseId] = useState(task.releaseId || "none");
+  const projectId = task.projectId?._id;
+  const { data: releases } = useQuery({
+    queryKey: ["releases", projectId],
+    queryFn: async () => (await api.get(`/projects/${projectId}/releases`)).data.data as Release[],
+    enabled: !!projectId && open,
+  });
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assigneeIds.map((u) => u._id));
   const [startDate, setStartDate] = useState(task.startDate?.slice(0, 10) || "");
   const [dueDate, setDueDate] = useState(task.dueDate?.slice(0, 10) || "");
@@ -47,6 +54,7 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
     setStatus(task.status);
     setPriority(task.priority);
     setType(task.type || "Task");
+    setReleaseId(task.releaseId || "none");
     setAssigneeIds(task.assigneeIds.map((u) => u._id));
     setStartDate(task.startDate?.slice(0, 10) || "");
     setDueDate(task.dueDate?.slice(0, 10) || "");
@@ -241,6 +249,32 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
                 disabled={!canEditTask}
               />
             </div>
+
+                        {projectId && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Release</label>
+                <Select
+                  disabled={!canEditTask}
+                  value={releaseId}
+                  onValueChange={async (v) => {
+                    setReleaseId(v);
+                    if (await updateField({ releaseId: v === "none" ? null : v })) {
+                      qc.invalidateQueries({ queryKey: ["releases", projectId] });
+                    } else {
+                      setReleaseId(task.releaseId || "none");
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No release</SelectItem>
+                    {releases?.map((r) => (
+                      <SelectItem key={r._id} value={r._id}>{r.name}{r.status === "Released" ? " (released)" : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

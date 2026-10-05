@@ -4,7 +4,7 @@ import { Types } from "mongoose";
 import { IProject } from "../models/Project";
 import { Task } from "../models/Task";
 import {
-  Milestone, Sprint, TimeEntry, RiskIssue, ProjectComment, ProjectFile, TaskDependency, AutomationRule, RecurringTask,
+  Milestone, Sprint, TimeEntry, RiskIssue, ProjectComment, ProjectFile, TaskDependency, AutomationRule, RecurringTask, Release,
 } from "../models/ProjectExtras";
 
 export const UPLOAD_DIR = path.join(process.cwd(), "uploads", "projects");

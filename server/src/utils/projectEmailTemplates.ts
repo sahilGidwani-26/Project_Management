@@ -126,3 +126,15 @@ export const bugReportedEmail = (p: { title: string; severity: string; projectNa
     "View bug"
   );
 };
+
+
+export const releaseEmail = (p: { kind: "planned" | "published" | "dueSoon" | "overdue"; projectName: string; name: string; plannedDate?: Date | string | null; byName?: string; summary?: string; url: string }) => {
+  const map = {
+    planned: [`New release planned: ${p.name}`, "Release planned", `${p.byName ? b(p.byName) + " planned" : "Planned"} a release in ${b(p.projectName)}:`],
+    published: [`Released: ${p.name} (${p.projectName})`, "Release published", `${p.byName ? b(p.byName) + " published" : "Published"} a release in ${b(p.projectName)}:`],
+    dueSoon: [`Release due soon: ${p.name}`, "Release due soon", `A release in ${b(p.projectName)} is planned for soon:`],
+    overdue: [`Release overdue: ${p.name}`, "Release overdue", `A planned release in ${b(p.projectName)} has passed its date:`],
+  }[p.kind];
+  const rows: [string, string][] = p.kind === "published" ? [] : [["Planned date", d(p.plannedDate)]];
+  return mail(map[0], map[1], map[2], p.name, rows, p.summary ? box(p.summary) : "", p.url, "View release");
+};

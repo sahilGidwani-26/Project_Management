@@ -170,3 +170,21 @@ export const RecurringTask = model<any>(
     { timestamps: true }
   )
 );
+
+const releaseSchema = new Schema(
+  {
+    ...scope(),
+    name: { type: String, required: true, trim: true },
+    description: String,
+    plannedDate: Date,
+    status: { type: String, enum: ["Planned", "Released"], default: "Planned" },
+    releasedAt: Date,
+    releasedBy: oid("User"),
+    dueSoonSentAt: Date,
+    overdueSentAt: Date,
+    createdBy: oid("User"),
+  },
+  { timestamps: true }
+);
+releaseSchema.index({ projectId: 1, name: 1 }, { unique: true });
+export const Release = model<any>("ProjectRelease", releaseSchema);

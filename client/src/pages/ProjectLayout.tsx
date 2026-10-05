@@ -15,7 +15,7 @@ import { cn, formatDate, initials } from "@/lib/utils";
 interface ProjectHealth { state: "ON_TRACK" | "NEEDS_ATTENTION" | "AT_RISK"; reasons: string[] }
 
 const tabs = [
-  ["overview", "Overview"], ["board", "Board"], ["list", "List"], ["timeline", "Timeline"], ["calendar", "Calendar"],
+  ["overview", "Overview"], ["board", "Board"], ["list", "List"], ["bugs", "Bugs"], ["releases", "Releases"], ["timeline", "Timeline"], ["calendar", "Calendar"],
   ["sprints", "Sprints"], ["files", "Files"], ["discussion", "Discussion"], ["members", "Members"], ["reports", "Reports"],
   ["time", "Time"], ["risks", "Risks"], ["automation", "Automation"], ["settings", "Settings"],
 ] as const;

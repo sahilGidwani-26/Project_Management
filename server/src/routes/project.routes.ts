@@ -8,6 +8,7 @@ import { bulkSchema, createProjectSchema, memberSchema, timeEntrySchema, updateP
 import * as core from "../controllers/project.controller";
 import * as plan from "../controllers/projectPlanning.controller";
 import * as collab from "../controllers/projectCollab.controller";
+import * as rel from "../controllers/projectRelease.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -97,5 +98,17 @@ router.get(`${P}/recurring`, view, plan.recurringCrud.list);
 router.post(`${P}/recurring`, edit, plan.recurringCrud.create);
 router.patch(`${P}/recurring/:itemId`, edit, plan.recurringCrud.update);
 router.delete(`${P}/recurring/:itemId`, edit, plan.recurringCrud.remove);
+
+
+/* ---- releases / changelog ---- */
+router.get(`${P}/releases`, view, rel.listReleases);
+router.post(`${P}/releases`, edit, rel.releaseCrud.create);
+router.patch(`${P}/releases/:itemId`, edit, rel.releaseCrud.update);
+router.delete(`${P}/releases/:itemId`, admin, rel.releaseCrud.remove);
+router.put(`${P}/releases/:itemId/tasks`, edit, rel.setReleaseTasks);
+router.post(`${P}/releases/:itemId/add-done`, edit, rel.addDoneTasks);
+router.post(`${P}/releases/:itemId/publish`, admin, rel.publishRelease);
+router.post(`${P}/releases/:itemId/reopen`, admin, rel.reopenRelease);
+router.get(`${P}/releases/:itemId/changelog`, view, rel.getChangelog);
 
 export default router;

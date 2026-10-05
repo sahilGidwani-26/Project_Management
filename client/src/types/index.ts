@@ -91,6 +91,7 @@ export interface Task {
   workspaceId: string;
   projectId?: TaskProjectRef;
   taskNumber: number;
+  releaseId?: string;
   parentTaskId?: string;
   title: string;
   description?: string;
@@ -304,4 +305,23 @@ export interface BugDetails {
   environment?: string;
   foundInVersion?: string;
   fixedInVersion?: string;
+}
+
+export interface ReleaseTaskRef {
+  _id: string;
+  title: string;
+  taskNumber: number;
+  type: TaskType;
+  status: TaskStatus;
+}
+
+export interface Release {
+  _id: string;
+  name: string;
+  description?: string;
+  plannedDate?: string;
+  status: "Planned" | "Released";
+  releasedAt?: string;
+  tasks: ReleaseTaskRef[];
+  stats: { total: number; done: number; open: number; bugs: number; features: number; improvements: number; progress: number };
 }

@@ -15,6 +15,7 @@ import { getNextSequence } from "../utils/counter";
 import { projectLeads, sendToUsers } from "../services/projectEvents";
 import { getBlockers, runAutomations } from "../services/automation";
 import { Server as SocketIOServer } from "socket.io";
+import { Release } from "../models/ProjectExtras";
 
 function getIO(req: Request): SocketIOServer {
   return req.app.get("io");
@@ -23,9 +24,8 @@ function getIO(req: Request): SocketIOServer {
 /** Fields a client is allowed to change through PATCH /tasks/:id (everything else is ignored). */
 const UPDATABLE = [
   "title", "description", "assigneeIds", "priority", "startDate", "dueDate", "labels",
-  "estimatedMinutes", "milestoneId", "type", "bugDetails", "status", "order",
+  "estimatedMinutes", "milestoneId", "type", "bugDetails", "status", "order", "releaseId",
 ];
-
 async function notifyAssignees(params: {
   req: Request;
   assigneeIds: string[];
@@ -297,6 +297,11 @@ export const updateTask = catchAsync(async (req: Request, res: Response) => {
   UPDATABLE.forEach((k) => {
     if (k in req.body) patch[k] = req.body[k];
   });
+
+    if (patch.releaseId) {
+    const ok = previous.projectId && (await Release.exists({ _id: patch.releaseId, projectId: previous.projectId }));
+    if (!ok) throw ApiError.badRequest("That release does not belong to this task's project");
+  }
 
   const statusChanged = typeof patch.status === "string" && patch.status !== previous.status;
   if (statusChanged) {

@@ -21,6 +21,7 @@ import ProjectLayout from "@/pages/ProjectLayout";
 import ProjectBoardPage from "@/pages/ProjectBoardPage";
 import ProjectListPage from "@/pages/ProjectListPage";
 import ProjectOverview from "@/pages/project/ProjectOverview";
+import ProjectBugs from "@/pages/project/ProjectBugs";
 import ProjectTimeline from "@/pages/project/ProjectTime";
 import ProjectCalendar from "@/pages/project/ProjectCalendar";
 import ProjectSprints from "@/pages/project/ProjectSprints";
@@ -28,6 +29,7 @@ import ProjectFiles from "@/pages/project/ProjectFiles";
 import ProjectDiscussion from "@/pages/project/ProjectDiscussion";
 import ProjectMembers from "@/pages/project/ProjectMembers";
 import ProjectReports from "@/pages/project/ProjectReports";
+import ProjectReleases from "@/pages/project/ProjectReleases";
 import ProjectTime from "@/pages/project/ProjectTime";
 import ProjectRisks from "@/pages/project/ProjectRisks";
 import ProjectAutomation from "@/pages/project/ProjectAutomation";
@@ -76,6 +78,8 @@ export default function App() {
                     <Route path="overview" element={<ProjectOverview />} />
                     <Route path="board" element={<ProjectBoardPage />} />
                     <Route path="list" element={<ProjectListPage />} />
+                    <Route path="bugs" element={<ProjectBugs />} />
+                    <Route path="releases" element={<ProjectReleases />} />
                     <Route path="timeline" element={<ProjectTimeline />} />
                     <Route path="calendar" element={<ProjectCalendar />} />
                     <Route path="sprints" element={<ProjectSprints />} />
