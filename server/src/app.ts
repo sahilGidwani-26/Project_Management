@@ -16,7 +16,16 @@ export function createApp(): Application {
       exposedHeaders: ["Content-Disposition"],
     })
   );
-  app.use(express.json({ limit: "5mb" }));
+
+  app.use(
+    express.json({
+      limit: "5mb",
+      verify: (req, _res, buf) => {
+        (req as any).rawBody = Buffer.from(buf);
+      },
+    })
+  );
+
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
 
@@ -26,9 +35,16 @@ export function createApp(): Application {
     standardHeaders: true,
     legacyHeaders: false,
   });
+
   app.use("/api", apiLimiter);
 
-  app.get("/", (_req, res) => res.json({ success: true, message: "Project Management SaaS API" }));
+  app.get("/", (_req, res) =>
+    res.json({
+      success: true,
+      message: "Project Management SaaS API",
+    })
+  );
+
   app.use("/api", routes);
 
   app.use(notFoundHandler);

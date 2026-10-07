@@ -16,6 +16,7 @@ import { SubtasksSection } from "./SubtasksSection";
 import { TaskDiscussion } from "./TaskDiscussion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Task, TaskType, BugSeverity, Release } from "@/types";
+import { TaskDevelopment } from "./TaskDevelopment";
 
 const TYPES: TaskType[] = ["Task", "Bug", "Feature", "Improvement"];
 const SEVERITIES: BugSeverity[] = ["Minor", "Major", "Critical"];
@@ -344,6 +345,8 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
             </div>
 
             <SubtasksSection taskId={task._id} canEdit={canEditTask} />
+
+                        {task.projectId && <TaskDevelopment taskId={task._id} taskNumber={task.taskNumber} title={task.title} />}
 
             {canDeleteTask && (
               <div className="flex justify-end border-t border-border pt-3">

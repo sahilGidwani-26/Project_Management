@@ -6,6 +6,7 @@ import { Task } from "../models/Task";
 import {
   Milestone, Sprint, TimeEntry, RiskIssue, ProjectComment, ProjectFile, TaskDependency, AutomationRule, RecurringTask, Release,
 } from "../models/ProjectExtras";
+import { GithubIntegration, GithubTaskLink } from "../models/GithubIntegration";
 
 export const UPLOAD_DIR = path.join(process.cwd(), "uploads", "projects");
 
@@ -127,7 +128,7 @@ export async function purgeProject(projectId: Types.ObjectId | string) {
   const q = { projectId };
   await Promise.all([
     Task.deleteMany(q), Milestone.deleteMany(q), Sprint.deleteMany(q), TimeEntry.deleteMany(q), RiskIssue.deleteMany(q),
-    ProjectComment.deleteMany(q), ProjectFile.deleteMany(q), TaskDependency.deleteMany(q), AutomationRule.deleteMany(q), RecurringTask.deleteMany(q),
+    ProjectComment.deleteMany(q), ProjectFile.deleteMany(q), TaskDependency.deleteMany(q), AutomationRule.deleteMany(q), RecurringTask.deleteMany(q) , GithubIntegration.deleteMany(q), GithubTaskLink.deleteMany(q),
   ]);
 }
 

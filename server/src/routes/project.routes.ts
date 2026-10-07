@@ -9,6 +9,7 @@ import * as core from "../controllers/project.controller";
 import * as plan from "../controllers/projectPlanning.controller";
 import * as collab from "../controllers/projectCollab.controller";
 import * as rel from "../controllers/projectRelease.controller";
+import * as gh from "../controllers/projectGithub.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -110,5 +111,12 @@ router.post(`${P}/releases/:itemId/add-done`, edit, rel.addDoneTasks);
 router.post(`${P}/releases/:itemId/publish`, admin, rel.publishRelease);
 router.post(`${P}/releases/:itemId/reopen`, admin, rel.reopenRelease);
 router.get(`${P}/releases/:itemId/changelog`, view, rel.getChangelog);
+
+/* ---- GitHub integration (settings are admin-only, activity is visible to members) ---- */
+router.get(`${P}/github`, admin, gh.getIntegration);
+router.put(`${P}/github`, admin, gh.saveIntegration);
+router.delete(`${P}/github`, admin, gh.removeIntegration);
+router.post(`${P}/github/regenerate-secret`, admin, gh.regenerateSecret);
+router.get(`${P}/github/activity`, view, gh.listActivity);
 
 export default router;

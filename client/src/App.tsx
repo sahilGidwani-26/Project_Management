@@ -46,6 +46,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminWorkspaces from "@/pages/admin/AdminWorkspaces";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
+import ProjectGithub from "@/pages/project/ProjectGithub";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -80,6 +81,7 @@ export default function App() {
                     <Route path="list" element={<ProjectListPage />} />
                     <Route path="bugs" element={<ProjectBugs />} />
                     <Route path="releases" element={<ProjectReleases />} />
+                    <Route path="github" element={<ProjectGithub />} />
                     <Route path="timeline" element={<ProjectTimeline />} />
                     <Route path="calendar" element={<ProjectCalendar />} />
                     <Route path="sprints" element={<ProjectSprints />} />

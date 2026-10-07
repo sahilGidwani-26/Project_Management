@@ -138,3 +138,28 @@ export const releaseEmail = (p: { kind: "planned" | "published" | "dueSoon" | "o
   const rows: [string, string][] = p.kind === "published" ? [] : [["Planned date", d(p.plannedDate)]];
   return mail(map[0], map[1], map[2], p.name, rows, p.summary ? box(p.summary) : "", p.url, "View release");
 };
+
+export const githubPrEmail = (p: { kind: "opened" | "merged" | "closed"; repo: string; prNumber: number; prTitle: string; prUrl: string; author?: string; taskNumber: number; taskTitle: string; movedTo?: string; url: string }) => {
+  const map = {
+    opened: [`PR opened for TASK-${p.taskNumber}`, "Pull request opened", `A pull request was opened on ${b(p.repo)} for this task:`],
+    merged: [`PR merged for TASK-${p.taskNumber}`, "Pull request merged", `A pull request was merged on ${b(p.repo)} for this task:`],
+    closed: [`PR closed without merging: TASK-${p.taskNumber}`, "Pull request closed", `A pull request was closed without merging on ${b(p.repo)}:`],
+  }[p.kind];
+  const rows: [string, string][] = [["Pull request", `#${p.prNumber} ${p.prTitle}`]];
+  if (p.author) rows.push(["Author", p.author]);
+  if (p.movedTo) rows.push(["Task status", `moved to ${p.movedTo}`]);
+  const link = p.prUrl ? `<p style="margin-top:12px;"><a href="${esc(p.prUrl)}" style="color:#0f766e;">Open the pull request on GitHub</a></p>` : "";
+  return mail(map[0], map[1], map[2], `TASK-${p.taskNumber} ${p.taskTitle}`, rows, link, p.url, "View task");
+};
+
+export const githubConnectionEmail = (p: { kind: "connected" | "disconnected"; repo: string; projectName: string; byName: string; url: string }) =>
+  mail(
+    `GitHub ${p.kind}: ${p.repo}`,
+    p.kind === "connected" ? "GitHub connected" : "GitHub disconnected",
+    `${b(p.byName)} ${p.kind} GitHub for ${b(p.projectName)}:`,
+    p.repo,
+    [],
+    p.kind === "connected" ? box("Mention TASK-<number> in a branch name, commit message or pull request title to link it to a task.") : "",
+    p.url,
+    "Open project"
+  );

@@ -325,3 +325,39 @@ export interface Release {
   tasks: ReleaseTaskRef[];
   stats: { total: number; done: number; open: number; bugs: number; features: number; improvements: number; progress: number };
 }
+
+
+export interface GithubIntegrationInfo {
+  _id: string;
+  repo: string;
+  enabled: boolean;
+  secret: string;
+  automation: { onPrOpened: string | null; onPrMerged: string | null; onBranchPush: string | null };
+  verifiedAt?: string;
+  lastEventAt?: string;
+  lastEventType?: string;
+  eventsCount: number;
+  webhookPath: string;
+}
+
+export interface GithubLink {
+  _id: string;
+  type: "pr" | "commit";
+  externalId: string;
+  repo?: string;
+  title?: string;
+  url?: string;
+  state?: "open" | "draft" | "merged" | "closed" | "pushed";
+  authorLogin?: string;
+  authorAvatar?: string;
+  branch?: string;
+  baseBranch?: string;
+  updatedAtExt?: string;
+  mergedAt?: string;
+  taskId: string | { _id: string; title: string; taskNumber: number };
+}
+
+export interface GithubActivity {
+  prs: GithubLink[];
+  commits: GithubLink[];
+}
