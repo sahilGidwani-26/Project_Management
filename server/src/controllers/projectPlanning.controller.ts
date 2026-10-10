@@ -99,13 +99,32 @@ export const setSprintTasks = catchAsync(async (req: Request, res: Response) => 
   const sprint = await Sprint.findOne({ _id: req.params.itemId, projectId: r.project._id });
   if (!sprint) throw ApiError.notFound("Sprint not found");
   if (sprint.status === "Completed") return fail(res, "This sprint is already completed");
-  const add = await projectTaskIds(r, ids(req.body.add));
-  const remove = new Set(ids(req.body.remove));
-  if (add.length) await Sprint.updateMany({ projectId: r.project._id, status: { $ne: "Completed" }, _id: { $ne: sprint._id } }, { $pull: { taskIds: { $in: add } } });
-  const next = new Set(sprint.taskIds.map(String));
+
+  const now = new Date();
+  const current = new Set<string>(sprint.taskIds.map(String));
+  const add = (await projectTaskIds(r, ids(req.body.add))).filter((id) => !current.has(id));
+  const remove = ids(req.body.remove).filter((id) => current.has(id));
+
+  // a task lives in one open sprint: pull it out of the others (and log that for a running sprint)
+  if (add.length) {
+    const others: any[] = await Sprint.find({ projectId: r.project._id, status: { $ne: "Completed" }, _id: { $ne: sprint._id }, taskIds: { $in: add } });
+    for (const o of others) {
+      const moved = o.taskIds.map(String).filter((id: string) => add.includes(id));
+      o.taskIds = o.taskIds.filter((id: any) => !add.includes(String(id)));
+      if (o.status === "Active") moved.forEach((id: string) => o.scopeLog.push({ taskId: id, action: "remove", at: now }));
+      await o.save();
+    }
+  }
+
+  const next = new Set(current);
   add.forEach((i) => next.add(i));
   remove.forEach((i) => next.delete(i));
   sprint.taskIds = [...next];
+  if (sprint.status === "Active") {
+    // changes after the start are "scope change" in the sprint report
+    add.forEach((id) => sprint.scopeLog.push({ taskId: id, action: "add", at: now }));
+    remove.forEach((id) => sprint.scopeLog.push({ taskId: id, action: "remove", at: now }));
+  }
   await sprint.save();
   if (sprint.status === "Active" && add.length) await Task.updateMany({ _id: { $in: add }, status: "Backlog" }, { status: "Todo" });
   return sendSuccess(res, 200, sprint, "Sprint updated");
@@ -120,6 +139,8 @@ export const startSprint = catchAsync(async (req: Request, res: Response) => {
   sprint.status = "Active";
   sprint.startedAt = new Date();
   sprint.committed = sprint.taskIds.length;
+  sprint.committedTaskIds = [...sprint.taskIds]; // "what we promised", for the sprint report
+  sprint.scopeLog = [];
   if (!sprint.startDate) sprint.startDate = new Date();
   await sprint.save();
   await Task.updateMany({ _id: { $in: sprint.taskIds }, status: "Backlog" }, { status: "Todo" });
@@ -148,16 +169,18 @@ export const completeSprint = catchAsync(async (req: Request, res: Response) => 
     target.taskIds = [...new Set([...target.taskIds.map(String), ...open.map(String)])];
     await target.save();
   }
+  sprint.doneTaskIds = done; // snapshots for the sprint report
+  sprint.carriedOverTaskIds = open;
   sprint.taskIds = done;
   sprint.status = "Completed";
   sprint.completedAt = new Date();
   sprint.velocity = done.length;
   await sprint.save();
 
-  await logActivity({ workspaceId: r.project.workspaceId, projectId: r.project._id, actorId: req.user!.id, action: "sprint_completed", entity: "sprint", metadata: { title: sprint.name, done: done.length, total } });
+  await logActivity({ workspaceId: r.project.workspaceId, projectId: r.project._id, actorId: req.user!.id, action: "sprint_completed", entity: "sprint", metadata: { title: sprint.name, done: done.length, total, carriedOver: open.length } });
   const byName = await getName(req.user!.id);
   void sendToUsers(projectRecipients(r.project), req.user!.id, () =>
-    sprintEmail({ kind: "completed", projectName: r.project.name, name: sprint.name, goal: sprint.goal, done: done.length, total, byName, url: url(r, "sprints") })
+    sprintEmail({ kind: "completed", projectName: r.project.name, name: sprint.name, goal: sprint.goal, done: done.length, total, carried: open.length, byName, url: url(r, "sprint-reports") })
   );
   return sendSuccess(res, 200, sprint, "Sprint completed");
 });

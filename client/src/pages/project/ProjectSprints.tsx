@@ -13,9 +13,11 @@ import { useProject, useProjectResource, useProjectTasks } from "@/hooks/useProj
 import { attempt, toInput, toISO } from "@/lib/projectMeta";
 import { formatDate } from "@/lib/utils";
 import { Sprint, Task } from "@/types";
+import { useNavigate } from "react-router-dom";
 
 export default function ProjectSprints() {
-  const { projectId, canEdit } = useProject();
+  const { workspaceId, projectId, canEdit } = useProject();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: sprints, reload } = useProjectResource<Sprint[]>("sprints", projectId);
   const { data: tasks } = useProjectTasks(projectId);
@@ -80,7 +82,15 @@ export default function ProjectSprints() {
             <Card key={s._id}><CardContent className="space-y-3 p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2"><h3 className="font-medium">{s.name}</h3><Badge variant={s.status === "Active" ? "default" : "secondary"}>{s.status}</Badge></div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium">{s.name}</h3>
+                    <Badge variant={s.status === "Active" ? "default" : "secondary"}>{s.status}</Badge>
+                    {s.status !== "Planned" && (
+                      <button className="text-xs text-primary hover:underline" onClick={() => navigate(`/app/${workspaceId}/projects/${projectId}/sprint-reports?sprint=${s._id}`)}>
+                        View report
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{s.startDate ? formatDate(s.startDate) : "…"} → {s.endDate ? formatDate(s.endDate) : "…"}{s.status === "Completed" && ` · velocity ${s.velocity}/${s.committed}`}</p>
                   {s.goal && <p className="mt-1 text-sm">Goal: {s.goal}</p>}
                 </div>

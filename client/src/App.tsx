@@ -47,6 +47,7 @@ import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminWorkspaces from "@/pages/admin/AdminWorkspaces";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 import ProjectGithub from "@/pages/project/ProjectGithub";
+import ProjectSprintReports from "@/pages/project/ProjectSprintReports";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -85,6 +86,7 @@ export default function App() {
                     <Route path="timeline" element={<ProjectTimeline />} />
                     <Route path="calendar" element={<ProjectCalendar />} />
                     <Route path="sprints" element={<ProjectSprints />} />
+                    <Route path="sprint-reports" element={<ProjectSprintReports />} />
                     <Route path="files" element={<ProjectFiles />} />
                     <Route path="discussion" element={<ProjectDiscussion />} />
                     <Route path="members" element={<ProjectMembers />} />

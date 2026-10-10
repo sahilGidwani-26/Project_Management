@@ -77,17 +77,20 @@ export const milestoneEmail = (p: { kind: "created" | "completed" | "dueSoon" | 
   return mail(map[0], map[1], map[2], p.title, [["Due", d(p.dueDate)]], "", p.url, "View milestones");
 };
 
-export const sprintEmail = (p: { kind: "started" | "completed"; projectName: string; name: string; goal?: string; endDate?: Date | string | null; done?: number; total?: number; byName: string; url: string }) =>
-  mail(
+export const sprintEmail = (p: { kind: "started" | "completed"; projectName: string; name: string; goal?: string; endDate?: Date | string | null; done?: number; total?: number; carried?: number; byName: string; url: string }) => {
+  const rows: [string, string][] = p.kind === "started" ? [["Ends", d(p.endDate)]] : [["Completed tasks", `${p.done ?? 0} of ${p.total ?? 0}`]];
+  if (p.kind === "completed" && p.carried) rows.push(["Carried over", String(p.carried)]);
+  return mail(
     `Sprint ${p.kind}: "${p.name}"`,
     p.kind === "started" ? "Sprint started" : "Sprint completed",
     `${b(p.byName)} ${p.kind} a sprint in ${b(p.projectName)}:`,
     p.name,
-    p.kind === "started" ? [["Ends", d(p.endDate)]] : [["Completed tasks", `${p.done ?? 0} of ${p.total ?? 0}`]],
+    rows,
     p.goal ? box(`Goal: ${p.goal}`) : "",
     p.url,
-    "Open sprints"
+    p.kind === "completed" ? "View sprint report" : "Open sprints"
   );
+};
 
 /* Collaboration */
 export const projectMentionEmail = (p: { projectName: string; byName: string; snippet: string; url: string }) =>

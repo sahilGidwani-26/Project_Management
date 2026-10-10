@@ -10,6 +10,7 @@ import * as plan from "../controllers/projectPlanning.controller";
 import * as collab from "../controllers/projectCollab.controller";
 import * as rel from "../controllers/projectRelease.controller";
 import * as gh from "../controllers/projectGithub.controller";
+import * as sr from "../controllers/projectSprintReports.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -118,5 +119,10 @@ router.put(`${P}/github`, admin, gh.saveIntegration);
 router.delete(`${P}/github`, admin, gh.removeIntegration);
 router.post(`${P}/github/regenerate-secret`, admin, gh.regenerateSecret);
 router.get(`${P}/github/activity`, view, gh.listActivity);
+
+/* ---- sprint reports ---- */
+router.get(`${P}/sprint-reports`, view, sr.sprintOverview);
+router.get(`${P}/sprint-reports/flow`, view, sr.flowReport);
+router.get(`${P}/sprint-reports/sprints/:sprintId`, view, sr.sprintDetail);
 
 export default router;

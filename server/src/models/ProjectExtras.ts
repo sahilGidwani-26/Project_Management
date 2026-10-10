@@ -37,6 +37,11 @@ export const Sprint = model<any>(
       endDate: Date,
       status: { type: String, enum: ["Planned", "Active", "Completed"], default: "Planned" },
       taskIds: [oid("Task")],
+            // Snapshots for sprint reports
+      committedTaskIds: [oid("Task")], // what was in the sprint when it started
+      doneTaskIds: [oid("Task")], // what was Done when it was completed
+      carriedOverTaskIds: [oid("Task")], // unfinished tasks when it was completed
+      scopeLog: [{ _id: false, taskId: oid("Task"), action: { type: String, enum: ["add", "remove"] }, at: { type: Date, default: Date.now } }],
       committed: { type: Number, default: 0 },
       velocity: { type: Number, default: 0 },
       startedAt: Date,

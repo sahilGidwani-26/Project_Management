@@ -361,3 +361,90 @@ export interface GithubActivity {
   prs: GithubLink[];
   commits: GithubLink[];
 }
+
+export type ReportUnit = "tasks" | "hours";
+
+export interface ReportTaskRow {
+  _id: string;
+  taskNumber: number;
+  title: string;
+  type: TaskType;
+  status: TaskStatus;
+  weight: number;
+}
+
+export interface SprintSummary {
+  legacy: boolean;
+  committed: number | null;
+  added: number;
+  removed: number;
+  completed: number;
+  carriedOver: number | null;
+  scopeTotal: number;
+  completionRate: number | null;
+  commitmentRate: number | null;
+  lists?: Record<"committed" | "added" | "removed" | "completed" | "carriedOver", ReportTaskRow[]>;
+}
+
+export interface SprintBrief {
+  _id: string;
+  name: string;
+  goal?: string;
+  status: "Planned" | "Active" | "Completed";
+  startDate?: string;
+  endDate?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface SprintReportRow extends SprintBrief, Omit<SprintSummary, "lists"> {}
+
+export interface SprintOverview {
+  unit: ReportUnit;
+  sprints: SprintReportRow[];
+  activeSprintId: string | null;
+  velocity: { average3: number | null; averageAll: number | null; completedSprints: number };
+  estimates: { tasks: number; withEstimate: number };
+}
+
+export interface CycleItem {
+  _id: string;
+  taskNumber: number;
+  title: string;
+  type: TaskType;
+  doneAt: number;
+  leadDays: number;
+  cycleDays: number | null;
+}
+
+export interface DayStats { count: number; avg: number | null; median: number | null; p85: number | null }
+
+export interface CycleStatsData {
+  cycle: DayStats;
+  lead: DayStats;
+  histogram: { label: string; count: number }[];
+  timeInStatus: Record<string, number | null>;
+  items: CycleItem[];
+}
+
+export type FlowRow = Record<string, number | string>;
+
+export interface SprintDetail {
+  planned: boolean;
+  unit?: ReportUnit;
+  sprint: SprintBrief;
+  taskCount?: number;
+  summary?: SprintSummary;
+  burndown?: { date: string; remaining: number | null; scope: number | null; ideal: number }[];
+  flow?: FlowRow[];
+  cycle?: CycleStatsData;
+  estimates?: { tasks: number; withEstimate: number };
+}
+
+export interface FlowReport {
+  unit: ReportUnit;
+  days: number;
+  flow: FlowRow[];
+  cycle: CycleStatsData;
+  estimates: { tasks: number; withEstimate: number };
+}
