@@ -1,11 +1,13 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { FolderKanban, CheckSquare, Users, AlertTriangle } from "lucide-react";
 import { api } from "@/lib/api";
+import { WorkspaceForecast } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StateBadge, fmtDate } from "@/components/forecast/forecastUi";
 
 interface WorkspaceAnalytics {
   totalProjects: number;
@@ -38,7 +40,14 @@ export default function Dashboard() {
     enabled: !!workspaceId,
   });
 
+  const { data: forecast, isLoading: forecastLoading } = useQuery({
+    queryKey: ["workspace-forecast", workspaceId],
+    queryFn: async () => (await api.get(`/analytics/workspace/${workspaceId}/forecast`)).data.data as WorkspaceForecast,
+    enabled: !!workspaceId,
+  });
+
   const chartData = (data?.tasksByStatus || []).map((s) => ({ status: s._id, count: s.count }));
+  const risky = (forecast?.projects || []).filter((p) => p.state === "AT_RISK" || p.state === "NEEDS_ATTENTION").slice(0, 5);
 
   return (
     <div>
@@ -63,6 +72,45 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Delivery forecast</CardTitle>
+            <Link to={`/app/${workspaceId}/forecast`} className="text-xs text-primary hover:underline">View all</Link>
+          </CardHeader>
+          <CardContent>
+            {forecastLoading && <Skeleton className="h-16 w-full" />}
+            {!forecastLoading && !forecast?.projects.length && (
+              <p className="text-sm text-muted-foreground">No open projects to forecast yet.</p>
+            )}
+            {!forecastLoading && !!forecast?.projects.length && !risky.length && (
+              <p className="text-sm text-muted-foreground">
+                {forecast.summary.onTrack + forecast.summary.complete > 0
+                  ? "No project is at risk of missing its deadline."
+                  : "Forecasts appear once your projects have a week of finished tasks."}
+              </p>
+            )}
+            {!!risky.length && (
+              <div className="divide-y divide-border">
+                {risky.map((p) => (
+                  <Link
+                    key={p.project._id}
+                    to={`/app/${workspaceId}/projects/${p.project._id}/forecast`}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-secondary/30"
+                  >
+                    <span className="font-medium"><span className="mr-2">{p.project.icon || "📁"}</span>{p.project.name}</span>
+                    <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {p.probability != null && <span>{p.probability}% chance</span>}
+                      <span>safe date {fmtDate(p.p85)}</span>
+                      <span>deadline {fmtDate(p.deadline)}</span>
+                      <StateBadge state={p.state} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">

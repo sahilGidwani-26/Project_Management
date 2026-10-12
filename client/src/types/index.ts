@@ -448,3 +448,59 @@ export interface FlowReport {
   cycle: CycleStatsData;
   estimates: { tasks: number; withEstimate: number };
 }
+
+export type ForecastState = "COMPLETE" | "ON_TRACK" | "NEEDS_ATTENTION" | "AT_RISK" | "NO_DEADLINE" | "NOT_ENOUGH_DATA" | "PENDING";
+
+export interface ForecastAnalysis {
+  remaining: number;
+  deadline: string | null;
+  state: ForecastState;
+  dates: { p50: string | null; p70: string | null; p85: string | null; p95: string | null };
+  probability: number | null;
+  daysLate85: number | null;
+  fix: { capacity85: number; removeNeeded: number; speedNeededPct: number | null } | null;
+  distribution: { date: string; p: number }[];
+}
+
+export interface ProjectForecast extends ForecastAnalysis {
+  openTasks: number;
+  totalTasks: number;
+  reason: string | null;
+  throughput: {
+    perWeek: number;
+    windowDays: number;
+    doneInWindow: number;
+    weekly: { weekStart: string; done: number }[];
+    trend: "up" | "down" | "flat";
+  };
+  whatIf: (ForecastAnalysis & { remove: number; speed: number }) | null;
+  generatedAt: string;
+}
+
+export interface ForecastHistoryRow {
+  day: string;
+  state: ForecastState;
+  remaining?: number;
+  p50?: string | null;
+  p85?: string | null;
+  deadline?: string | null;
+  probability?: number | null;
+  throughputPerWeek?: number;
+}
+
+export interface WorkspaceForecastRow {
+  project: { _id: string; name: string; color: string; icon?: string; status: string; endDate?: string };
+  state: ForecastState;
+  remaining: number | null;
+  p50: string | null;
+  p85: string | null;
+  deadline: string | null;
+  probability: number | null;
+  perWeek: number;
+  fresh: boolean;
+}
+
+export interface WorkspaceForecast {
+  projects: WorkspaceForecastRow[];
+  summary: { atRisk: number; needsAttention: number; onTrack: number; complete: number; total: number };
+}

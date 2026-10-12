@@ -48,6 +48,8 @@ import AdminWorkspaces from "@/pages/admin/AdminWorkspaces";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 import ProjectGithub from "@/pages/project/ProjectGithub";
 import ProjectSprintReports from "@/pages/project/ProjectSprintReports";
+import Forecast from "@/pages/Forecast";
+import ProjectForecast from "@/pages/project/ProjectForecast";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -87,6 +89,7 @@ export default function App() {
                     <Route path="calendar" element={<ProjectCalendar />} />
                     <Route path="sprints" element={<ProjectSprints />} />
                     <Route path="sprint-reports" element={<ProjectSprintReports />} />
+                    <Route path="forecast" element={<ProjectForecast />} />
                     <Route path="files" element={<ProjectFiles />} />
                     <Route path="discussion" element={<ProjectDiscussion />} />
                     <Route path="members" element={<ProjectMembers />} />
@@ -100,6 +103,7 @@ export default function App() {
                   <Route path="chat" element={<Chat />} />
                   <Route path="team" element={<WorkspaceTeam />} />
                   <Route path="analytics" element={<Analytics />} />
+                  <Route path="forecast" element={<Forecast />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="search" element={<SearchPage />} />
                 </Route>

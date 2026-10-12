@@ -12,6 +12,7 @@ import {
   Users,
   ListChecks,
   CalendarDays,
+  TrendingUp,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -35,7 +36,8 @@ const navItems = [
   { to: "calendar", label: "Calendar", icon: CalendarDays },
   { to: "chat", label: "Team Chat", icon: MessageSquare },
   { to: "team", label: "Team", icon: Users },
-  { to: "analytics", label: "Analytics", icon: BarChart3 },
+    { to: "analytics", label: "Analytics", icon: BarChart3 },
+  { to: "forecast", label: "Forecast", icon: TrendingUp },
 ];
 
 export function Sidebar() {

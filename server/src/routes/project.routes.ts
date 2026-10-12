@@ -11,6 +11,7 @@ import * as collab from "../controllers/projectCollab.controller";
 import * as rel from "../controllers/projectRelease.controller";
 import * as gh from "../controllers/projectGithub.controller";
 import * as sr from "../controllers/projectSprintReports.controller";
+import * as fc from "../controllers/projectForecast.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -124,5 +125,9 @@ router.get(`${P}/github/activity`, view, gh.listActivity);
 router.get(`${P}/sprint-reports`, view, sr.sprintOverview);
 router.get(`${P}/sprint-reports/flow`, view, sr.flowReport);
 router.get(`${P}/sprint-reports/sprints/:sprintId`, view, sr.sprintDetail);
+
+/* ---- delivery forecast ---- */
+router.get(`${P}/forecast`, view, fc.projectForecast);
+router.get(`${P}/forecast/history`, view, fc.forecastHistory);
 
 export default router;

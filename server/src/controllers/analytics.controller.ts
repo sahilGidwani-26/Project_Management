@@ -6,6 +6,7 @@ import { Project } from "../models/Project";
 import { WorkspaceMember } from "../models/WorkspaceMember";
 import { ActivityLog } from "../models/ActivityLog";
 import { Types } from "mongoose";
+import { ForecastSnapshot } from "../models/ForecastSnapshot";
 
 /** Resolves the `range` query param (today | 7d | 30d | 3m | custom via from/to) into a createdAt filter. */
 function resolveDateFilter(req: Request): Record<string, unknown> {
@@ -89,6 +90,15 @@ export const projectHealth = catchAsync(async (req: Request, res: Response) => {
   let state: "ON_TRACK" | "NEEDS_ATTENTION" | "AT_RISK" = "ON_TRACK";
   if (overdueTasks >= 3 || blockedTasks >= 1 || dueSoonTasks >= 2) state = "AT_RISK";
   else if (overdueTasks > 0 || dueSoonTasks > 0 || unassignedTasks > 2) state = "NEEDS_ATTENTION";
+
+    // Delivery forecast (latest snapshot from the last 3 days)
+  const recentDay = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const snap: any = await ForecastSnapshot.findOne({ projectId: pid, day: { $gte: recentDay } }).sort({ day: -1 }).lean();
+  if (snap && snap.probability != null && ["AT_RISK", "NEEDS_ATTENTION"].includes(snap.state)) {
+    reasons.push(`Forecast: ${snap.probability}% chance to meet the deadline`);
+    if (snap.state === "AT_RISK") state = "AT_RISK";
+    else if (state === "ON_TRACK") state = "NEEDS_ATTENTION";
+  }
 
   return sendSuccess(
     res,

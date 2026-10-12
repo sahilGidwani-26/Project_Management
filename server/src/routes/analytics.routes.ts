@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { workspaceAnalytics, projectAnalytics, teamWorkload, projectHealth, activityTimeline } from "../controllers/analytics.controller";
+import { workspaceForecast } from "../controllers/projectForecast.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -8,6 +9,7 @@ router.use(requireAuth);
 router.get("/workspace/:workspaceId", workspaceAnalytics);
 router.get("/workspace/:workspaceId/workload", teamWorkload);
 router.get("/workspace/:workspaceId/activity", activityTimeline);
+router.get("/workspace/:workspaceId/forecast", workspaceForecast);
 router.get("/project/:projectId", projectAnalytics);
 router.get("/project/:projectId/health", projectHealth);
 

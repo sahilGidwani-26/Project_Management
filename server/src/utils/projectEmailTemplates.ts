@@ -166,3 +166,25 @@ export const githubConnectionEmail = (p: { kind: "connected" | "disconnected"; r
     p.url,
     "Open project"
   );
+
+  export const forecastEmail = (p: { projectName: string; deadline: Date | string; p85?: Date | string | null; probability: number; remaining: number; removeNeeded?: number | null; url: string }) => {
+  const rows: [string, string][] = [
+    ["Deadline", d(p.deadline)],
+    ["Likely finish (85% sure)", p.p85 ? d(p.p85) : "more than a year away"],
+    ["Chance to meet the deadline", `${p.probability}%`],
+    ["Open tasks", String(p.remaining)],
+  ];
+  const extra = p.removeNeeded
+    ? box(`To meet the deadline with 85% confidence, about ${p.removeNeeded} task(s) would need to move out of scope, or the team would need to finish work faster.`)
+    : "";
+  return mail(
+    `Deadline at risk: "${p.projectName}"`,
+    "Delivery forecast: at risk",
+    `Based on your team's recent pace, ${b(p.projectName)} is unlikely to finish by its deadline:`,
+    p.projectName,
+    rows,
+    extra,
+    p.url,
+    "Open forecast"
+  );
+};
