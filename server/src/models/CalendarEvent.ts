@@ -8,16 +8,17 @@ export interface ICalendarEvent extends Document {
   description?: string;
   location?: string;
   meetingLink?: string;
+  googleEventId?: string; // set when the Meet link was created through the organizer's Google Calendar
   startTime: Date;
   endTime: Date;
-  timezone: string; // organizer's IANA timezone, used to format times in emails
+  timezone: string;
   organizerId: Types.ObjectId;
   attendeeIds: Types.ObjectId[];
   status: "scheduled" | "cancelled";
   notes?: string;
   notesUpdatedBy?: Types.ObjectId;
   notesUpdatedAt?: Date;
-  sequence: number; // bumped on every change so calendar apps treat emails as updates
+  sequence: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +31,7 @@ const calendarEventSchema = new Schema<ICalendarEvent>(
     description: String,
     location: String,
     meetingLink: String,
+    googleEventId: String,
     startTime: { type: Date, required: true },
     endTime: { type: Date, required: true },
     timezone: { type: String, default: "UTC" },

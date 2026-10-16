@@ -11,16 +11,18 @@ import adminRoutes from "./admin.routes";
 import labelRoutes from "./label.routes";
 import milestoneRoutes from "./milestone.routes";
 import timeEntryRoutes from "./timeEntry.routes";
-import githubWebhookRoutes from "./githubWebhook.routes";
 import attachmentRoutes from "./attachment.routes";
+import githubWebhookRoutes from "./githubWebhook.routes";
 import templateRoutes from "./template.routes";
 import savedViewRoutes from "./savedView.routes";
 import searchRoutes from "./search.routes";
 import eventRoutes from "./event.routes";
+import googleCalendarRoutes from "./googleCalendar.routes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
+router.use("/auth/google-calendar", googleCalendarRoutes);
 router.use("/workspaces", workspaceRoutes);
 router.use("/projects", projectRoutes);
 router.use("/tasks", taskRoutes);
@@ -34,8 +36,8 @@ router.use("/milestones", milestoneRoutes);
 router.use("/time-entries", timeEntryRoutes);
 router.use("/attachments", attachmentRoutes);
 router.use("/templates", templateRoutes);
-router.use("/integrations/github/webhook", githubWebhookRoutes);
 router.use("/saved-views", savedViewRoutes);
+router.use("/integrations/github/webhook", githubWebhookRoutes);
 router.use("/search", searchRoutes);
 router.use("/events", eventRoutes);
 

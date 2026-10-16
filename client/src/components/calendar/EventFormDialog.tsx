@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { CalendarDays, Loader2, Video } from "lucide-react";
+import { CalendarDays, CheckCircle2, Loader2, Video } from "lucide-react";
 import { api, apiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CalendarEvent, EventType } from "@/types/calendar";
@@ -14,8 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { AssigneeMultiSelect } from "@/components/tasks/AssigneeMultiSelect";
 import { toast } from "sonner";
-
-const AUTO_LINK_PREFIX = "https://meet.jit.si/Flowbase-";
 
 export function EventFormDialog({
   workspaceId,
@@ -40,15 +38,19 @@ export function EventFormDialog({
   const [title, setTitle] = useState(event?.title ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
   const [location, setLocation] = useState(event?.location ?? "");
-  const [customLink, setCustomLink] = useState(
-    event?.meetingLink && !event.meetingLink.startsWith(AUTO_LINK_PREFIX) ? event.meetingLink : ""
-  );
+  const [meetingLink, setMeetingLink] = useState(event?.meetingLink ?? "");
+  const [linkTouched, setLinkTouched] = useState(false); // only send the link if the user actually changed it
   const [date, setDate] = useState(format(start0 ?? initialDate, "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState(start0 ? format(start0, "HH:mm") : "10:00");
   const [endTime, setEndTime] = useState(end0 ? format(end0, "HH:mm") : "11:00");
   const [attendeeIds, setAttendeeIds] = useState<string[]>(event?.attendeeIds.map((u) => u._id) ?? []);
   const [notify, setNotify] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const { data: calendarStatus } = useQuery({
+    queryKey: ["google-calendar-status"],
+    queryFn: async () => (await api.get("/auth/google-calendar/status")).data.data as { connected: boolean },
+  });
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +61,7 @@ export function EventFormDialog({
       toast.error("End time must be after start time");
       return;
     }
-    if (customLink.trim() && !/^https?:\/\/\S+$/i.test(customLink.trim())) {
+    if (linkTouched && meetingLink.trim() && !/^https?:\/\/\S+$/i.test(meetingLink.trim())) {
       toast.error("Meeting link must start with http:// or https://");
       return;
     }
@@ -69,7 +71,7 @@ export function EventFormDialog({
       title,
       description,
       location,
-      meetingLink: customLink.trim(),
+      ...(linkTouched ? { meetingLink: meetingLink.trim() } : {}),
       startTime: start.toISOString(),
       endTime: end.toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -171,13 +173,25 @@ export function EventFormDialog({
               <Label htmlFor="ev-link">Meeting link (optional)</Label>
               <Input
                 id="ev-link"
-                value={customLink}
-                onChange={(e) => setCustomLink(e.target.value)}
+                value={meetingLink}
+                onChange={(e) => {
+                  setMeetingLink(e.target.value);
+                  setLinkTouched(true);
+                }}
                 placeholder="https://meet.google.com/..."
               />
-              <p className="text-xs text-muted-foreground">
-                Leave empty and a video link is created automatically. Paste your own Google Meet / Zoom link to use that instead.
-              </p>
+              {meetingLink.trim() ? (
+                <p className="text-xs text-muted-foreground">This exact link will be used.</p>
+              ) : calendarStatus?.connected ? (
+                <p className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> A real Google Meet link will be created automatically.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  A free video room is created automatically. For a real Google Meet link, connect Google Calendar in
+                  Settings → Connected Accounts, or paste your own link above.
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-1.5">

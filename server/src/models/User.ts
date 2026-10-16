@@ -8,6 +8,13 @@ export interface INotificationPreferences {
   workspaceInvites: boolean;
 }
 
+export interface IGoogleCalendarAuth {
+  connected: boolean;
+  accessToken?: string;
+  refreshToken?: string;
+  expiryDate?: Date;
+}
+
 export interface IUser extends Document {
   _id: Types.ObjectId;
   name: string;
@@ -26,6 +33,7 @@ export interface IUser extends Document {
   passwordResetExpires?: Date;
   emailVerificationTokenHash?: string;
   notificationPreferences: INotificationPreferences;
+  googleCalendar?: IGoogleCalendarAuth;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +61,15 @@ const userSchema = new Schema<IUser>(
       comments: { type: Boolean, default: true },
       deadlines: { type: Boolean, default: true },
       workspaceInvites: { type: Boolean, default: true },
+    },
+    // Tokens for creating real Google Meet links via the Calendar API.
+    // Separate from googleId/login: that is identity only, this is a distinct
+    // consent (calendar.events scope) the user grants from Settings.
+    googleCalendar: {
+      connected: { type: Boolean, default: false },
+      accessToken: { type: String, select: false },
+      refreshToken: { type: String, select: false },
+      expiryDate: { type: Date, select: false },
     },
   },
   { timestamps: true }

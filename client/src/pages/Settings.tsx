@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { api, apiError } from "@/lib/api";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -9,17 +12,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { initials } from "@/lib/utils";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 
 export default function Settings() {
   const { user, refetchUser } = useAuth();
+  const { workspaceId } = useParams();
+  const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [name, setName] = useState(user?.name || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [saving, setSaving] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [prefs, setPrefs] = useState({ taskAssigned: true, mentions: true, comments: true, deadlines: true, workspaceInvites: true });
 
   useEffect(() => {
@@ -27,6 +36,26 @@ export default function Settings() {
     setJobTitle(user?.jobTitle || "");
     setBio(user?.bio || "");
   }, [user]);
+
+  // Google sends the browser back here after the Calendar consent screen (?calendar=connected | error)
+  useEffect(() => {
+    const status = searchParams.get("calendar");
+    if (!status) return;
+    if (status === "connected") {
+      toast.success("Google Calendar connected. New meetings will get a real Google Meet link.");
+      qc.invalidateQueries({ queryKey: ["google-calendar-status"] });
+    } else if (status === "error") {
+      toast.error("Couldn't connect Google Calendar. Please try again.");
+    }
+    searchParams.delete("calendar");
+    setSearchParams(searchParams, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { data: calendarStatus, isLoading: loadingCalendarStatus } = useQuery({
+    queryKey: ["google-calendar-status"],
+    queryFn: async () => (await api.get("/auth/google-calendar/status")).data.data as { connected: boolean },
+  });
 
   const saveProfile = async () => {
     setSaving(true);
@@ -50,14 +79,39 @@ export default function Settings() {
     }
   };
 
+  const connectGoogleCalendar = async () => {
+    setConnecting(true);
+    try {
+      const res = await api.get(`/auth/google-calendar/connect-url?workspaceId=${workspaceId}`);
+      window.location.href = res.data.data.url; // full-page redirect to Google's consent screen
+    } catch (err) {
+      toast.error(apiError(err));
+      setConnecting(false);
+    }
+  };
+
+  const disconnectGoogleCalendar = async () => {
+    setDisconnecting(true);
+    try {
+      await api.post("/auth/google-calendar/disconnect");
+      qc.invalidateQueries({ queryKey: ["google-calendar-status"] });
+      toast.success("Google Calendar disconnected");
+    } catch (err) {
+      toast.error(apiError(err));
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader title="Settings" description="Manage your account and preferences" />
       <div className="p-6 max-w-2xl">
-        <Tabs defaultValue="account">
+        <Tabs defaultValue={searchParams.get("calendar") ? "connections" : "account"}>
           <TabsList>
             <TabsTrigger value="account">Account</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="connections">Connected Accounts</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
           </TabsList>
 
@@ -120,6 +174,48 @@ export default function Settings() {
                   </div>
                 ))}
                 <Button onClick={savePrefs}>Save preferences</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="connections">
+            <Card>
+              <CardHeader>
+                <CardTitle>Connected Accounts</CardTitle>
+                <CardDescription>Let Flowbase create real meeting links on services you use</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                      <CalendarDays className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Google Calendar</p>
+                      <p className="max-w-sm text-xs text-muted-foreground">
+                        When connected, meetings you organize get a real Google Meet link, created on your own
+                        Google Calendar, instead of a generic video room.
+                      </p>
+                      {calendarStatus?.connected && (
+                        <Badge variant="secondary" className="mt-2 gap-1 text-emerald-700 dark:text-emerald-400">
+                          <CheckCircle2 className="h-3 w-3" /> Connected
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {loadingCalendarStatus ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : calendarStatus?.connected ? (
+                    <Button variant="outline" size="sm" onClick={disconnectGoogleCalendar} disabled={disconnecting}>
+                      {disconnecting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Disconnect
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={connectGoogleCalendar} disabled={connecting}>
+                      {connecting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Connect
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
