@@ -12,6 +12,7 @@ import * as rel from "../controllers/projectRelease.controller";
 import * as gh from "../controllers/projectGithub.controller";
 import * as sr from "../controllers/projectSprintReports.controller";
 import * as fc from "../controllers/projectForecast.controller";
+import * as st from "../controllers/standup.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -129,5 +130,8 @@ router.get(`${P}/sprint-reports/sprints/:sprintId`, view, sr.sprintDetail);
 /* ---- delivery forecast ---- */
 router.get(`${P}/forecast`, view, fc.projectForecast);
 router.get(`${P}/forecast/history`, view, fc.forecastHistory);
+
+/* ---- team standup ---- */
+router.get(`${P}/standup`, view, st.projectStandup);
 
 export default router;

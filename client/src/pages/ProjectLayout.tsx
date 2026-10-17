@@ -16,7 +16,7 @@ interface ProjectHealth { state: "ON_TRACK" | "NEEDS_ATTENTION" | "AT_RISK"; rea
 
 const tabs = [
   ["overview", "Overview"], ["board", "Board"], ["list", "List"], ["bugs", "Bugs"], ["releases", "Releases"], ["github", "GitHub"], ["timeline", "Timeline"], ["calendar", "Calendar"],
-  ["sprints", "Sprints"], ["sprint-reports", "Sprint reports"], ["forecast", "Forecast"], ["files", "Files"], ["discussion", "Discussion"], ["members", "Members"], ["reports", "Reports"],
+  ["sprints", "Sprints"], ["sprint-reports", "Sprint reports"], ["forecast", "Forecast"], ["standup", "Standup"], ["files", "Files"], ["discussion", "Discussion"], ["members", "Members"], ["reports", "Reports"],
   ["time", "Time"], ["risks", "Risks"], ["automation", "Automation"], ["settings", "Settings"],
 ] as const;
 

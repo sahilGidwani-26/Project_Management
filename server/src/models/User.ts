@@ -6,6 +6,8 @@ export interface INotificationPreferences {
   comments: boolean;
   deadlines: boolean;
   workspaceInvites: boolean;
+  standupDigest: boolean;
+  standupHour: number;
 }
 
 export interface IGoogleCalendarAuth {
@@ -61,6 +63,8 @@ const userSchema = new Schema<IUser>(
       comments: { type: Boolean, default: true },
       deadlines: { type: Boolean, default: true },
       workspaceInvites: { type: Boolean, default: true },
+      standupDigest: { type: Boolean, default: false }, // opt-in
+      standupHour: { type: Number, default: 9, min: 5, max: 12 }, // local hour of the morning email
     },
     // Tokens for creating real Google Meet links via the Calendar API.
     // Separate from googleId/login: that is identity only, this is a distinct

@@ -188,3 +188,22 @@ export const githubConnectionEmail = (p: { kind: "connected" | "disconnected"; r
     "Open forecast"
   );
 };
+
+export const standupDigestEmail = (p: { name: string; workspaceName: string; dateLabel: string; windowHours: number; yesterday: string[]; today: string[]; blockers: string[]; team?: string[]; away?: boolean; url: string }) => {
+  const section = (title: string, items: string[], empty: string) =>
+    `<p style="margin:18px 0 4px;font-weight:600;">${esc(title)}</p>` +
+    (items.length
+      ? `<ul style="margin:0;padding-left:18px;color:#374151;">${items.map((i) => `<li style="margin:3px 0;">${esc(i)}</li>`).join("")}</ul>`
+      : `<p style="margin:0;color:#9ca3af;">${esc(empty)}</p>`);
+
+  const body =
+    `<p>Good morning ${esc(p.name.split(" ")[0] || p.name)}, here is your standup for <b>${esc(p.workspaceName)}</b>.</p>` +
+    (p.away ? `<p style="color:#6b7280;">You marked yourself away today.</p>` : "") +
+    section(p.windowHours > 24 ? "Since Friday" : "Yesterday", p.yesterday, "No recorded activity.") +
+    section("Today", p.today, "Nothing scheduled.") +
+    section("Blockers", p.blockers, "Nothing is blocking you. 🎉") +
+    (p.team && p.team.length ? section("Team blockers (projects you lead)", p.team, "") : "") +
+    `<p style="margin-top:18px;font-size:12px;color:#9ca3af;">Built automatically from task moves, commits, time logs and discussion. You can add your own note or turn this email off on the Standup page.</p>`;
+
+  return { subject: `Your standup for ${p.dateLabel}`, html: wrap(`Standup · ${p.dateLabel}`, body, p.url, "Open standup") };
+};

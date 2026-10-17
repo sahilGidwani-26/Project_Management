@@ -504,3 +504,62 @@ export interface WorkspaceForecast {
   projects: WorkspaceForecastRow[];
   summary: { atRisk: number; needsAttention: number; onTrack: number; complete: number; total: number };
 }
+
+export interface StandupRef {
+  _id: string;
+  taskNumber: number;
+  title: string;
+  type: string;
+  status: string;
+  projectId?: string;
+  projectName?: string;
+  dueDate: string | null;
+}
+
+export interface StandupBlocker {
+  kind: "critical" | "dependency" | "overdue" | "review" | "stale" | "risk";
+  task?: StandupRef;
+  text: string;
+  days?: number;
+}
+
+export interface StandupNote {
+  plan: string;
+  blockers: string;
+  away: boolean;
+}
+
+export interface MemberStandup {
+  day: string;
+  windowHours: number;
+  yesterday: {
+    done: StandupRef[];
+    inReview: StandupRef[];
+    started: StandupRef[];
+    timeMinutes: number;
+    comments: number;
+    commits: { sha: string; title: string; url?: string; taskNumber: number }[];
+  };
+  today: { dueToday: StandupRef[]; inProgress: StandupRef[]; soon: StandupRef[] };
+  blockers: StandupBlocker[];
+  counts: { done: number; blockers: number; open: number };
+}
+
+export interface MyStandup extends MemberStandup {
+  note: StandupNote | null;
+  timezone: string;
+  prefs: { standupDigest: boolean; standupHour: number };
+  emailConfigured: boolean;
+}
+
+export interface TeamStandupMember extends MemberStandup {
+  user: { _id: string; name: string; profileImage?: string; jobTitle?: string };
+  note: StandupNote | null;
+}
+
+export interface TeamStandup {
+  day: string;
+  windowHours: number;
+  members: TeamStandupMember[];
+  summary: { members: number; done: number; blockedPeople: number; away: number };
+}

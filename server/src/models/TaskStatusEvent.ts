@@ -12,5 +12,6 @@ const schema = new Schema({
 });
 schema.index({ taskId: 1, at: 1 });
 schema.index({ projectId: 1, at: 1 });
+schema.index({ workspaceId: 1, at: 1 });
 
 export const TaskStatusEvent = model<any>("TaskStatusEvent", schema);
