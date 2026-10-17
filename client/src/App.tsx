@@ -52,6 +52,7 @@ import Forecast from "@/pages/Forecast";
 import ProjectForecast from "@/pages/project/ProjectForecast";
 import Standup from "@/pages/Standup";
 import ProjectStandup from "@/pages/project/ProjectStandup";
+import ProjectPoker from "@/pages/project/ProjectPoker";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -93,6 +94,7 @@ export default function App() {
                     <Route path="sprint-reports" element={<ProjectSprintReports />} />
                     <Route path="forecast" element={<ProjectForecast />} />
                     <Route path="standup" element={<ProjectStandup />} />
+                    <Route path="poker" element={<ProjectPoker />} />
                     <Route path="files" element={<ProjectFiles />} />
                     <Route path="discussion" element={<ProjectDiscussion />} />
                     <Route path="members" element={<ProjectMembers />} />

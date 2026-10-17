@@ -51,6 +51,8 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
   const [foundIn, setFoundIn] = useState(task.bugDetails?.foundInVersion || "");
   const [fixedIn, setFixedIn] = useState(task.bugDetails?.fixedInVersion || "");
 
+  const [estHours, setEstHours] = useState(task.estimatedMinutes ? String(task.estimatedMinutes / 60) : "");
+
   useEffect(() => {
     setStatus(task.status);
     setPriority(task.priority);
@@ -58,6 +60,7 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
     setReleaseId(task.releaseId || "none");
     setAssigneeIds(task.assigneeIds.map((u) => u._id));
     setStartDate(task.startDate?.slice(0, 10) || "");
+    setEstHours(task.estimatedMinutes ? String(task.estimatedMinutes / 60) : "");
     setDueDate(task.dueDate?.slice(0, 10) || "");
     setDescription(task.description || "");
     setEditingDescription(false);
@@ -295,6 +298,34 @@ export function TaskDetailDialog({ task, open, onOpenChange }: { task: Task; ope
                   value={dueDate}
                   onChange={(e) => { setDueDate(e.target.value); updateField({ dueDate: e.target.value ? new Date(e.target.value).toISOString() : null }); }}
                 />
+              </div>
+            </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Estimate (hours)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  disabled={!canEditTask}
+                  value={estHours}
+                  placeholder="e.g. 4"
+                  onChange={(e) => setEstHours(e.target.value)}
+                  onBlur={() => {
+                    const current = task.estimatedMinutes ? String(task.estimatedMinutes / 60) : "";
+                    if (estHours === current) return;
+                    const h = Number(estHours);
+                    if (estHours !== "" && (!Number.isFinite(h) || h < 0)) return;
+                    updateField({ estimatedMinutes: estHours === "" ? null : Math.round(h * 60) });
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Time logged</label>
+                <p className="flex h-10 items-center rounded-md border border-input bg-secondary/40 px-3 text-sm">
+                  {task.actualMinutes ? `${Math.floor(task.actualMinutes / 60)}h ${String(task.actualMinutes % 60).padStart(2, "0")}m` : "0h 00m"}
+                </p>
               </div>
             </div>
 

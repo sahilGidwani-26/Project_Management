@@ -207,3 +207,27 @@ export const standupDigestEmail = (p: { name: string; workspaceName: string; dat
 
   return { subject: `Your standup for ${p.dateLabel}`, html: wrap(`Standup · ${p.dateLabel}`, body, p.url, "Open standup") };
 };
+
+export const pokerStartedEmail = (p: { projectName: string; sessionName: string; byName: string; taskCount: number; url: string }) =>
+  mail(
+    `Planning poker started: ${p.sessionName}`,
+    "Planning poker started",
+    `${b(p.byName)} started an estimation session in ${b(p.projectName)}:`,
+    p.sessionName,
+    [["Tasks queued", String(p.taskCount)]],
+    box("Open the session and pick a card for each task. Votes stay hidden until the facilitator reveals them."),
+    p.url,
+    "Join the session"
+  );
+
+export const pokerSummaryEmail = (p: { projectName: string; sessionName: string; byName: string; lines: string[]; totalLabel: string; url: string }) =>
+  mail(
+    `Estimates from "${p.sessionName}"`,
+    "Planning poker summary",
+    `${b(p.byName)} ended the estimation session in ${b(p.projectName)}:`,
+    p.sessionName,
+    [["Tasks estimated", String(p.lines.length)], ["Total estimate", p.totalLabel]],
+    box(p.lines.slice(0, 25).join("\n") + (p.lines.length > 25 ? `\n…and ${p.lines.length - 25} more` : "")),
+    p.url,
+    "Open project"
+  );

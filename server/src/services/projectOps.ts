@@ -9,6 +9,7 @@ import {
 import { GithubIntegration, GithubTaskLink } from "../models/GithubIntegration";
 import { TaskStatusEvent } from "../models/TaskStatusEvent";
 import { ForecastSnapshot } from "../models/ForecastSnapshot";
+import { PokerSession, PokerEstimate } from "../models/Poker";
 
 export const UPLOAD_DIR = path.join(process.cwd(), "uploads", "projects");
 
@@ -131,6 +132,7 @@ export async function purgeProject(projectId: Types.ObjectId | string) {
   await Promise.all([
     Task.deleteMany(q), Milestone.deleteMany(q), Sprint.deleteMany(q), TimeEntry.deleteMany(q), RiskIssue.deleteMany(q), TaskStatusEvent.deleteMany(q),ForecastSnapshot.deleteMany(q),
     ProjectComment.deleteMany(q), ProjectFile.deleteMany(q), TaskDependency.deleteMany(q), AutomationRule.deleteMany(q), RecurringTask.deleteMany(q) , GithubIntegration.deleteMany(q), GithubTaskLink.deleteMany(q),
+    PokerSession.deleteMany(q), PokerEstimate.deleteMany(q),
   ]);
 }
 

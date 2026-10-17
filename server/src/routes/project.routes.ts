@@ -13,6 +13,7 @@ import * as gh from "../controllers/projectGithub.controller";
 import * as sr from "../controllers/projectSprintReports.controller";
 import * as fc from "../controllers/projectForecast.controller";
 import * as st from "../controllers/standup.controller";
+import * as pk from "../controllers/projectPoker.controller";
 
 const router = Router();
 router.use(requireAuth);
@@ -133,5 +134,22 @@ router.get(`${P}/forecast/history`, view, fc.forecastHistory);
 
 /* ---- team standup ---- */
 router.get(`${P}/standup`, view, st.projectStandup);
+
+/* ---- planning poker ---- */
+router.get(`${P}/poker`, view, pk.pokerOverview);
+router.get(`${P}/poker/accuracy`, view, pk.accuracy);
+router.post(`${P}/poker/sessions`, edit, pk.createSession);
+router.get(`${P}/poker/sessions/:sessionId`, view, pk.sessionState);
+router.post(`${P}/poker/sessions/:sessionId/join`, edit, pk.joinSession);
+router.post(`${P}/poker/sessions/:sessionId/leave`, edit, pk.leaveSession);
+router.post(`${P}/poker/sessions/:sessionId/take-over`, admin, pk.takeOver);
+router.put(`${P}/poker/sessions/:sessionId/queue`, edit, pk.editQueue);
+router.post(`${P}/poker/sessions/:sessionId/start-task`, edit, pk.startTask);
+router.post(`${P}/poker/sessions/:sessionId/vote`, edit, pk.vote);
+router.post(`${P}/poker/sessions/:sessionId/reveal`, edit, pk.reveal);
+router.post(`${P}/poker/sessions/:sessionId/revote`, edit, pk.revote);
+router.post(`${P}/poker/sessions/:sessionId/finalize`, edit, pk.finalize);
+router.post(`${P}/poker/sessions/:sessionId/skip`, edit, pk.skip);
+router.post(`${P}/poker/sessions/:sessionId/end`, edit, pk.endSession);
 
 export default router;

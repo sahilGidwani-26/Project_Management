@@ -563,3 +563,72 @@ export interface TeamStandup {
   members: TeamStandupMember[];
   summary: { members: number; done: number; blockedPeople: number; away: number };
 }
+
+export interface PokerCard { id: string; minutes: number | null; label: string }
+
+export interface PokerPerson { _id: string; name: string; profileImage?: string; jobTitle?: string }
+
+export interface PokerStats {
+  count: number;
+  numeric: number;
+  unsure: number;
+  coffee: number;
+  min: number | null;
+  max: number | null;
+  average: number | null;
+  median: number | null;
+  suggestedMinutes: number | null;
+  agreed: boolean;
+  bigSpread: boolean;
+}
+
+export interface PokerQueueItem {
+  _id: string;
+  taskNumber: number;
+  title: string;
+  type: string;
+  status: string;
+  state: "pending" | "current" | "estimated" | "skipped";
+  estimatedMinutes: number | null;
+  pokerMinutes: number | null;
+}
+
+export interface PokerView {
+  _id: string;
+  name: string;
+  status: "active" | "ended";
+  phase: "idle" | "voting" | "revealed";
+  round: number;
+  facilitator: PokerPerson | null;
+  isFacilitator: boolean;
+  canControl: boolean;
+  canTakeOver: boolean;
+  isParticipant: boolean;
+  canVote: boolean;
+  myVote: string | null;
+  participants: { user: PokerPerson; voted: boolean; vote?: string | null }[];
+  current: { _id: string; taskNumber: number; title: string; type: string; status: string; description: string; estimatedMinutes: number | null; actualMinutes: number } | null;
+  reveal: { votes: { user: PokerPerson; value: string; label: string; minutes: number | null }[]; stats: PokerStats } | null;
+  queue: PokerQueueItem[];
+  progress: { estimated: number; skipped: number; remaining: number; totalMinutes: number };
+  cards: PokerCard[];
+  endedAt: string | null;
+}
+
+export interface PokerOverview {
+  active: { _id: string; name: string; phase: string; facilitator: string; participants: number; queued: number; joined: boolean } | null;
+  recent: { _id: string; name: string; endedAt: string; facilitator: string; tasks: number; minutes: number }[];
+  cards: PokerCard[];
+}
+
+export interface PokerAccuracy {
+  estimatedTasks: number;
+  measured: number;
+  medianRatio: number | null;
+  within25: number;
+  tookLonger: number;
+  tookLess: number;
+  totalEstimated: number;
+  totalActual: number;
+  items: { _id: string; taskNumber: number; title: string; estimated: number; actual: number; ratio: number }[];
+}

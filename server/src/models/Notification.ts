@@ -10,7 +10,9 @@ export type NotificationType =
   | "workspace_invite"
   | "meeting_invite"
   | "meeting_updated"
-  | "meeting_cancelled";
+  | "meeting_cancelled"
+  | "poker_started"
+  | "forecast_risk";
 
 export interface INotification extends Document {
   _id: Types.ObjectId;
