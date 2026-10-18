@@ -73,7 +73,10 @@ export const login = catchAsync(async (req: Request, res: Response) => {
   return sendSuccess(
     res,
     200,
-    { user: { id: user._id, name: user.name, email: user.email, profileImage: user.profileImage }, token },
+    {
+      user: { id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, mustChangePassword: !!user.mustChangePassword },
+      token,
+    },
     "Logged in successfully"
   );
 });
@@ -106,8 +109,10 @@ export const changePassword = catchAsync(async (req: Request, res: Response) => 
 
   const valid = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!valid) throw ApiError.unauthorized("Current password is incorrect");
+  if (newPassword === currentPassword) throw ApiError.badRequest("Choose a password that is different from the current one");
 
   user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.mustChangePassword = false; // the temporary password given by an admin is now replaced
   await user.save();
 
   return sendSuccess(res, 200, null, "Password changed successfully");
