@@ -20,6 +20,9 @@ api.interceptors.response.use(
         window.location.href = "/login";
       }
     }
+    if (error.response?.data?.code === "PASSWORD_CHANGE_REQUIRED" && window.location.pathname !== "/change-password") {
+      window.location.href = "/change-password"; // Part 2 adds this page
+    }
     return Promise.reject(error);
   }
 );

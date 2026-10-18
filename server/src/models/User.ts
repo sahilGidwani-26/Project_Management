@@ -38,6 +38,8 @@ export interface IUser extends Document {
   googleCalendar?: IGoogleCalendarAuth;
   createdAt: Date;
   updatedAt: Date;
+  mustChangePassword?: boolean;
+  createdByWorkspaceId?: Types.ObjectId;
 }
 
 const userSchema = new Schema<IUser>(
@@ -57,6 +59,8 @@ const userSchema = new Schema<IUser>(
     passwordResetTokenHash: { type: String, select: false },
     passwordResetExpires: { type: Date, select: false },
     emailVerificationTokenHash: { type: String, select: false },
+    mustChangePassword: { type: Boolean, default: false }, // admin-created account still using its temporary password
+    createdByWorkspaceId: { type: Schema.Types.ObjectId, ref: "Workspace" },
     notificationPreferences: {
       taskAssigned: { type: Boolean, default: true },
       mentions: { type: Boolean, default: true },
