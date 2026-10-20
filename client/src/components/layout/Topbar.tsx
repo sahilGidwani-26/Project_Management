@@ -72,6 +72,9 @@ export function Topbar() {
             <DropdownMenuItem onClick={() => navigate(`/app/${workspaceId}/settings`)}>
               <UserIcon className="h-4 w-4" /> Profile & Settings
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate(`/app/${workspaceId}/team/me`)}>
+              <UserIcon className="h-4 w-4" /> My work profile
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
               <LogOut className="h-4 w-4" /> Log out

@@ -77,3 +77,23 @@ export const memberRemovedEmail = (p: { workspaceName: string; byName: string })
   subject: `You were removed from ${p.workspaceName}`,
   html: wrap("You were removed from a workspace", `<p>${b(p.byName)} removed you from ${b(p.workspaceName)}. You no longer have access to it.</p>`),
 });
+
+export const bulkImportSummaryEmail = (p: { workspaceName: string; mode: "create" | "invite"; created: number; added: number; invited: number; failed: number; failures: string[]; url: string }) => {
+  const rows: [string, string][] = [];
+  if (p.created) rows.push(["Accounts created", String(p.created)]);
+  if (p.added) rows.push(["Existing users added", String(p.added)]);
+  if (p.invited) rows.push(["Invitations sent", String(p.invited)]);
+  rows.push(["Failed", String(p.failed)]);
+  const failures = p.failures.length
+    ? box(`<b>Rows that did not go through:</b><br>${p.failures.map((f) => esc(f)).join("<br>")}${p.failed > p.failures.length ? `<br>…and ${p.failed - p.failures.length} more` : ""}`)
+    : "";
+  return {
+    subject: `Bulk import finished for ${p.workspaceName}`,
+    html: wrap(
+      "Bulk import finished",
+      `<p>Your ${p.mode === "invite" ? "invitation" : "account"} import into ${b(p.workspaceName)} is done.</p>${table(rows)}${failures}<p style="margin-top:12px;font-size:12px;color:#6b7280;">Passwords are never included in this email. Each new person received their own login email.</p>`,
+      p.url,
+      "View team"
+    ),
+  };
+};

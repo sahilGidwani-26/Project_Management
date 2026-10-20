@@ -6,6 +6,8 @@ export interface User {
   jobTitle?: string;
   bio?: string;
   isSuperAdmin?: boolean;
+  lastLoginAt?: string;
+  mustChangePassword?: boolean;
 }
 
 export type WorkspaceRole = "OWNER" | "ADMIN" | "PROJECT_MANAGER" | "MEMBER" | "VIEWER";
@@ -24,6 +26,9 @@ export interface WorkspaceMember {
   userId: User;
   role: WorkspaceRole;
   status: string;
+  joinedAt?: string;
+  addedVia?: "owner" | "invite" | "manual";
+  profile?: MemberProfile;
 }
 
 export type ProjectStatus = "Planning" | "Active" | "On Hold" | "Completed" | "Cancelled" | "Archived";
@@ -631,4 +636,125 @@ export interface PokerAccuracy {
   totalEstimated: number;
   totalActual: number;
   items: { _id: string; taskNumber: number; title: string; estimated: number; actual: number; ratio: number }[];
+}
+
+export type EmploymentType = "full_time" | "part_time" | "contractor" | "intern" | "client" | "vendor";
+
+export interface MemberProfile {
+  designation?: string;
+  department?: string;
+  employeeId?: string;
+  company?: string;
+  employmentType?: EmploymentType;
+  workLocation?: string;
+  skills?: string[];
+}
+
+export interface MemberPersonal {
+  phone?: string;
+  alternatePhone?: string;
+  dateOfBirth?: string;
+  address?: { line1?: string; line2?: string; city?: string; state?: string; country?: string; postalCode?: string };
+  emergencyContact?: { name?: string; phone?: string; relation?: string };
+}
+
+export interface MemberDetail {
+  member: {
+    _id: string;
+    workspaceId: string;
+    role: WorkspaceRole;
+    status: "active" | "deactivated" | "removed";
+    joinedAt?: string;
+    addedVia?: string;
+    userId: User & { createdAt?: string };
+    profile?: MemberProfile;
+  };
+  reportingManager: { _id: string; name: string; profileImage?: string } | null;
+  personal: MemberPersonal | null;
+  awaitingFirstLogin: boolean;
+  openTasks: number;
+  permissions: {
+    isSelf: boolean;
+    canEdit: boolean;
+    canEditAllFields: boolean;
+    canChangeRole: boolean;
+    canDeactivate: boolean;
+    canReactivate: boolean;
+    canRemove: boolean;
+    canResendCredentials: boolean;
+    canViewProgress: boolean;
+  };
+}
+
+export interface MemberProgress {
+  summary: {
+    assigned: number;
+    open: number;
+    completed: number;
+    overdue: number;
+    completionRate: number;
+    onTimeRate: number | null;
+    onTimeSample: number;
+    avgCycleDays: number | null;
+    medianCycleDays: number | null;
+    cycleSample: number;
+    completedLast30Days: number;
+  };
+  workload: { openTasks: number; estimatedMinutes: number; byStatus: Record<string, number>; dueThisWeek: number };
+  weekly: { weekStart: string; done: number }[];
+  time: { weekMinutes: number; monthMinutes: number };
+  development: { mergedPrs: number; commits: number; days: number };
+  projects: { _id: string; name: string; color: string; icon?: string; status: string; role: string; assigned: number; done: number }[];
+  upcoming: { _id: string; taskNumber: number; title: string; status: string; priority: string; type: string; dueDate: string | null; projectId: string | null; projectName: string | null }[];
+  recent: { _id: string; action: string; metadata?: Record<string, any>; createdAt: string }[];
+}
+
+export interface InvitationItem {
+  _id: string;
+  email: string;
+  role: WorkspaceRole;
+  token: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  invitedBy?: { _id: string; name: string };
+}
+
+export interface BulkCheckRow {
+  line: number;
+  email: string;
+  name: string;
+  ok: boolean;
+  role?: WorkspaceRole;
+  error?: string;
+  note?: string;
+}
+
+export interface BulkResultRow {
+  line: number;
+  email: string;
+  name?: string;
+  status: "created" | "added" | "invited" | "refreshed" | "failed";
+  message?: string;
+  temporaryPassword?: string;
+}
+
+export interface DepartmentGroup {
+  name: string;
+  key: string;
+  count: number;
+  openTasks?: number;
+  overdue?: number;
+  members: { memberId: string; userId: string; name: string; email: string; profileImage?: string; designation?: string; role: WorkspaceRole; openTasks?: number }[];
+}
+
+export interface OrgNodeData {
+  memberId: string;
+  userId: string;
+  name: string;
+  profileImage?: string;
+  designation?: string;
+  department?: string;
+  role: WorkspaceRole;
+  managerUserId: string | null;
 }

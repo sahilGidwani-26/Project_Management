@@ -3,7 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { loadWorkspaceRole, requireWorkspaceRole } from "../middleware/workspaceRole";
 import { validate } from "../middleware/validate";
 import { createWorkspaceSchema, inviteMemberSchema } from "../validations/workspace.validation";
-import { createMemberSchema, updateMemberSchema } from "../validations/people.validation";
+import { bulkImportSchema, createMemberSchema, updateMemberSchema } from "../validations/people.validation";
 import {
   createWorkspace,
   listMyWorkspaces,
@@ -25,12 +25,14 @@ import {
   cancelInvitation,
   acceptInvitation,
 } from "../controllers/workspace.controller";
+import { addToProject, bulkImport, exportMembers, listDepartments, orgChart } from "../controllers/peopleBulk.controller";
 
 const router = Router();
 
 router.use(requireAuth);
 
 const admins = requireWorkspaceRole("OWNER", "ADMIN");
+const managers = requireWorkspaceRole("OWNER", "ADMIN", "PROJECT_MANAGER");
 
 router.post("/", validate(createWorkspaceSchema), createWorkspace);
 router.get("/", listMyWorkspaces);
@@ -40,8 +42,15 @@ router.get("/:workspaceId", loadWorkspaceRole, getWorkspace);
 router.patch("/:workspaceId", loadWorkspaceRole, admins, updateWorkspace);
 router.delete("/:workspaceId", loadWorkspaceRole, requireWorkspaceRole("OWNER"), deleteWorkspace);
 
+/* ---- people overviews (fixed paths first, they must come before /members/:memberId) ---- */
+router.get("/:workspaceId/departments", loadWorkspaceRole, listDepartments);
+router.get("/:workspaceId/org-chart", loadWorkspaceRole, orgChart);
+
 /* ---- members ---- */
 router.get("/:workspaceId/members", loadWorkspaceRole, listMembers);
+router.get("/:workspaceId/members/export", loadWorkspaceRole, admins, exportMembers);
+router.post("/:workspaceId/members/bulk-import", validate(bulkImportSchema), loadWorkspaceRole, admins, bulkImport);
+router.post("/:workspaceId/members/add-to-project", loadWorkspaceRole, managers, addToProject);
 router.post("/:workspaceId/members", validate(createMemberSchema), loadWorkspaceRole, admins, createMember);
 router.get("/:workspaceId/members/:memberId", loadWorkspaceRole, getMember);
 router.get("/:workspaceId/members/:memberId/progress", loadWorkspaceRole, memberProgress);

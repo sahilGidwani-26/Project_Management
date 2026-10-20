@@ -28,3 +28,14 @@ export const updateMemberSchema = z.object({
   query: z.any(),
   params: z.any(),
 });
+
+export const bulkImportSchema = z.object({
+  body: z.object({
+    mode: z.enum(["create", "invite"]).default("create"),
+    rows: z.array(z.record(z.any())).min(1).max(100),
+    sendLoginDetails: z.boolean().optional(),
+    validateOnly: z.boolean().optional(),
+  }),
+  query: z.any(),
+  params: z.any(),
+});
