@@ -53,6 +53,10 @@ import ProjectForecast from "@/pages/project/ProjectForecast";
 import Standup from "@/pages/Standup";
 import ProjectStandup from "@/pages/project/ProjectStandup";
 import ProjectPoker from "@/pages/project/ProjectPoker";
+import ChangePassword from "@/pages/ChangePassword";
+import MemberDetail from "@/pages/MemberDetail";
+import TeamDepartments from "@/pages/TeamDepartments";
+import TeamOrgChart from "@/pages/TeamOrgChart";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -73,6 +77,7 @@ export default function App() {
 
               <Route element={<ProtectedRoute />}>
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/change-password" element={<ChangePassword />} />
                 <Route path="/app" element={<WorkspaceIndex />} />
 
                 <Route path="/app/:workspaceId" element={<AppLayout />}>
@@ -108,6 +113,9 @@ export default function App() {
                   <Route path="standup" element={<Standup />} />
                   <Route path="chat" element={<Chat />} />
                   <Route path="team" element={<WorkspaceTeam />} />
+                  <Route path="team/departments" element={<TeamDepartments />} />
+                  <Route path="team/org-chart" element={<TeamOrgChart />} />
+                  <Route path="team/:memberId" element={<MemberDetail />} />
                   <Route path="analytics" element={<Analytics />} />
                   <Route path="forecast" element={<Forecast />} />
                   <Route path="settings" element={<Settings />} />

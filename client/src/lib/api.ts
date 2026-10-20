@@ -21,7 +21,7 @@ api.interceptors.response.use(
       }
     }
     if (error.response?.data?.code === "PASSWORD_CHANGE_REQUIRED" && window.location.pathname !== "/change-password") {
-      window.location.href = "/change-password"; // Part 2 adds this page
+      window.location.href = "/change-password";
     }
     return Promise.reject(error);
   }

@@ -4,6 +4,7 @@ import { validate } from "../middleware/validate";
 import { loadWorkspaceRole, requireWorkspaceRole } from "../middleware/workspaceRole";
 import { loadTaskWorkspaceRole, NOT_VIEWER, MANAGERS_ONLY } from "../middleware/taskAccess";
 import { createTaskSchema, updateTaskStatusSchema } from "../validations/task.validation";
+import { getTaskGithub } from "../controllers/projectGithub.controller";
 import {
   createTask,
   listTasks,
@@ -27,6 +28,7 @@ router.post("/", validate(createTaskSchema), loadWorkspaceRole, requireWorkspace
 // Reading tasks/lists is open to every workspace member, Viewers included.
 router.get("/", listTasks);
 router.get("/:taskId", getTask);
+router.get("/:taskId/github", getTaskGithub);
 
 router.patch("/:taskId", loadTaskWorkspaceRole, requireWorkspaceRole(...NOT_VIEWER), updateTask);
 router.patch(

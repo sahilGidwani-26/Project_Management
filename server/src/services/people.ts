@@ -30,6 +30,10 @@ export function generatePassword(length = 12) {
     const j = crypto.randomInt(i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];
   }
+    if (!/[A-Za-z0-9]/.test(chars[0])) {
+    const k = chars.findIndex((c) => /[A-Za-z0-9]/.test(c));
+    [chars[0], chars[k]] = [chars[k], chars[0]];
+  }
   return chars.join("");
 }
 
@@ -111,4 +115,17 @@ export function buildPatch(input: any, who: { admin: boolean; self: boolean }) {
     set("personal.emergencyContact.relation", str(e.relation, 50));
   }
   return patch;
+}
+
+/** A person must never end up (directly or indirectly) reporting to themself. */
+export async function assertNoCycle(workspaceId: string, userId: string, managerUserId: string) {
+  const seen = new Set<string>();
+  let cur: string | undefined = managerUserId;
+  for (let i = 0; i < 50 && cur; i++) {
+    if (cur === userId) throw ApiError.badRequest("That would make the reporting line a circle, someone would end up reporting to themself");
+    if (seen.has(cur)) break;
+    seen.add(cur);
+    const m: any = await WorkspaceMember.findOne({ workspaceId, userId: cur, status: { $ne: "removed" } }).select("profile.reportingManagerId").lean();
+    cur = m?.profile?.reportingManagerId ? String(m.profile.reportingManagerId) : undefined;
+  }
 }

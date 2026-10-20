@@ -23,7 +23,7 @@ import {
   memberRemovedEmail, memberRoleChangedEmail, workspaceInviteEmail,
 } from "../utils/peopleEmailTemplates";
 import {
-  EMPLOYMENT, ROLES, assertNotLastOwner, buildPatch, canAssign, canManageTarget, generatePassword, isAdminRole, isManagerRole, passwordProblem,
+  EMPLOYMENT, ROLES, assertNoCycle, assertNotLastOwner, buildPatch, canAssign, canManageTarget, generatePassword, isAdminRole, isManagerRole, passwordProblem,
 } from "../services/people";
 import { cycleStats } from "../services/sprintMetrics";
 
@@ -323,6 +323,7 @@ export const updateMember = catchAsync(async (req: Request, res: Response) => {
     if (String(patch["profile.reportingManagerId"]) === String(member.userId)) throw ApiError.badRequest("Someone cannot report to themself");
     const mgr = await WorkspaceMember.exists({ workspaceId, userId: patch["profile.reportingManagerId"], status: "active" });
     if (!mgr) throw ApiError.badRequest("The reporting manager must be an active member of this workspace");
+    await assertNoCycle(workspaceId, String(member.userId), String(patch["profile.reportingManagerId"]));
   }
   member.set(patch);
   await member.save();

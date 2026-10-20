@@ -5,9 +5,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiError } from "@/lib/api";
 import { toast } from "sonner";
 import { GoogleSignInButton } from "@/components/common/GoogleSignInButton";
+import { api, apiError } from "@/lib/api";
 
 export default function Login() {
   const { login } = useAuth();
@@ -20,14 +20,18 @@ export default function Login() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      await login(email, password);
+          await login(email, password);
+      // An account created by an admin must replace its temporary password first
+      try {
+        const me = await api.get("/auth/me");
+        if (me.data.data.mustChangePassword) {
+          navigate("/change-password", { replace: true });
+          return;
+        }
+      } catch {
+        /* if this check fails the normal flow below still works */
+      }
       navigate(params.get("redirect") || "/app");
-    } catch (err) {
-      toast.error(apiError(err));
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (

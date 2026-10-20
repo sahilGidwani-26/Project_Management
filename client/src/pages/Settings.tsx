@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+// import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { initials } from "@/lib/utils";
 import { toast } from "sonner";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 
 export default function Settings() {
   const { user, refetchUser } = useAuth();
@@ -146,6 +147,17 @@ export default function Settings() {
                 </div>
                 <Button onClick={saveProfile} disabled={saving}>
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />} Save changes
+                </Button>
+              </CardContent>
+            </Card>
+                        <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Work profile</CardTitle>
+                <CardDescription>Your phone, address, skills and emergency contact are saved per workspace. Only you and workspace admins can see the private ones.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline">
+                  <Link to={`/app/${workspaceId}/team/me`}>Open my work profile</Link>
                 </Button>
               </CardContent>
             </Card>
