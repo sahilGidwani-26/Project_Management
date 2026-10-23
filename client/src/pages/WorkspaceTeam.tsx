@@ -14,12 +14,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EMPLOYMENT, PERMISSIONS, ROLES, copyText, employmentLabel, isAdminRole, roleLabel } from "@/lib/people";
+import { EMPLOYMENT, ROLES, copyText, employmentLabel, isAdminRole, roleLabel } from "@/lib/people";
 import { cn, formatDate } from "@/lib/utils";
 import { Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { BulkImportDialog } from "@/components/people/BulkImportDialog";
 import { attempt, downloadFromApi, timeAgo } from "@/lib/projectMeta";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useRoles } from "@/hooks/useRoles";
 
 type View = "grid" | "table";
 
@@ -34,6 +36,9 @@ export default function WorkspaceTeam() {
   const { currentWorkspace } = useWorkspace();
   const myRole = currentWorkspace?.myRole as WorkspaceRole | undefined;
   const admin = isAdminRole(myRole);
+  const { can } = usePermissions();
+  const { roles } = useRoles(workspaceId);
+  const roleOptions: [string, string][] = roles ? roles.map((r) => [r._id, r.name]) : ROLES.map((r) => [r, roleLabel(r)]);
 
   const [view, setView] = useState<View>(() => (localStorage.getItem("fb_team_view") as View) || "grid");
   const [search, setSearch] = useState("");
@@ -42,7 +47,7 @@ export default function WorkspaceTeam() {
   const [emp, setEmp] = useState("all");
   const [status, setStatus] = useState("active");
   const [addOpen, setAddOpen] = useState(false);
-    const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => localStorage.setItem("fb_team_view", view), [view]);
 
@@ -73,7 +78,7 @@ export default function WorkspaceTeam() {
   const list = all.filter((m) => {
     if (status === "active" && m.status !== "active") return false;
     if (status === "deactivated" && m.status !== "deactivated") return false;
-    if (role !== "all" && m.role !== role) return false;
+    if (role !== "all" && m.roleRefId !== role && m.role !== role) return false;
     if (dept !== "all" && m.profile?.department !== dept) return false;
     if (emp !== "all" && m.profile?.employmentType !== emp) return false;
     if (q && ![m.userId.name, m.userId.email, m.profile?.designation, m.profile?.company, m.profile?.department].some((v) => v?.toLowerCase().includes(q))) return false;
@@ -90,8 +95,9 @@ export default function WorkspaceTeam() {
       <PageHeader
         title="Team"
         description="People, roles and progress in this workspace"
-                actions={
+        actions={
           <div className="flex flex-wrap items-center gap-2">
+            {can("roles.view") && <Button size="sm" variant="outline" asChild><Link to={`/app/${workspaceId}/roles`}>Roles</Link></Button>}
             <Button size="sm" variant="outline" asChild><Link to={`/app/${workspaceId}/team/departments`}>Departments</Link></Button>
             <Button size="sm" variant="outline" asChild><Link to={`/app/${workspaceId}/team/org-chart`}>Org chart</Link></Button>
             {admin && (
@@ -132,7 +138,7 @@ export default function WorkspaceTeam() {
           </div>
           <Select value={role} onValueChange={setRole}>
             <SelectTrigger className="w-40"><SelectValue placeholder="Role" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All roles</SelectItem>{ROLES.map((r) => <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>)}</SelectContent>
+            <SelectContent><SelectItem value="all">All roles</SelectItem>{roleOptions.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
           </Select>
           {!!departments.length && (
             <Select value={dept} onValueChange={setDept}>
@@ -182,7 +188,7 @@ export default function WorkspaceTeam() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <RoleBadge role={m.role} />
+                      <RoleBadge role={m.role} name={m.roleName} color={m.roleColor} />
                       <StatusPills m={m} />
                       {m.profile?.employmentType && <Badge variant="outline" className="text-[10px]">{employmentLabel(m.profile.employmentType)}</Badge>}
                     </div>
@@ -214,7 +220,7 @@ export default function WorkspaceTeam() {
                         <StatusPills m={m} />
                       </div>
                     </td>
-                    <td className="px-4 py-2.5"><RoleBadge role={m.role} /></td>
+                    <RoleBadge role={m.role} name={m.roleName} color={m.roleColor} />
                     <td className="px-4 py-2.5 text-xs">{m.profile?.designation || m.userId.jobTitle || "—"}</td>
                     <td className="px-4 py-2.5 text-xs">{m.profile?.department || "—"}</td>
                     <td className="px-4 py-2.5 text-xs">{m.profile?.company || "—"}</td>
@@ -252,25 +258,19 @@ export default function WorkspaceTeam() {
           </section>
         )}
 
-        {/* role guide */}
-        <details className="rounded-lg border border-border">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">What can each role do?</summary>
-          <div className="overflow-x-auto border-t border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-secondary/50 text-xs text-muted-foreground">
-                <tr><th className="px-4 py-2 text-left font-medium">Action</th>{ROLES.map((r) => <th key={r} className="px-3 py-2 text-center font-medium">{roleLabel(r)}</th>)}</tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {PERMISSIONS.map(([label, allowed]) => (
-                  <tr key={label}>
-                    <td className="px-4 py-2">{label}</td>
-                    {ROLES.map((r) => <td key={r} className="px-3 py-2 text-center">{allowed.includes(r) ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground/50">–</span>}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+
+        {can("roles.view") && (
+          <p className="text-sm text-muted-foreground">
+            To see or change what each role can do, open{" "}
+            <Link
+              to={`/app/${workspaceId}/roles`}
+              className="text-primary hover:underline"
+            >
+              Roles &amp; permissions
+            </Link>.
+          </p>
+        )}
+
       </div>
 
       <AddMemberDialog open={addOpen} onOpenChange={setAddOpen} workspaceId={workspaceId!} myRole={myRole} onDone={refresh} />

@@ -57,6 +57,7 @@ import ChangePassword from "@/pages/ChangePassword";
 import MemberDetail from "@/pages/MemberDetail";
 import TeamDepartments from "@/pages/TeamDepartments";
 import TeamOrgChart from "@/pages/TeamOrgChart";
+import Roles from "@/pages/Roles";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -116,6 +117,7 @@ export default function App() {
                   <Route path="team/departments" element={<TeamDepartments />} />
                   <Route path="team/org-chart" element={<TeamOrgChart />} />
                   <Route path="team/:memberId" element={<MemberDetail />} />
+                  <Route path="roles" element={<Roles />} />
                   <Route path="analytics" element={<Analytics />} />
                   <Route path="forecast" element={<Forecast />} />
                   <Route path="settings" element={<Settings />} />

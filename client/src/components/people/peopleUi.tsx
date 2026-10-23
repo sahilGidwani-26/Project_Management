@@ -6,8 +6,11 @@ import { WorkspaceMember, WorkspaceRole } from "@/types";
 import { copyText, roleCls, roleLabel } from "@/lib/people";
 import { cn, initials } from "@/lib/utils";
 
-export function RoleBadge({ role }: { role: WorkspaceRole }) {
-  return <span className={cn("rounded-md px-2 py-0.5 text-xs font-medium", roleCls[role])}>{roleLabel(role)}</span>;
+export function RoleBadge({ role, name, color }: { role: WorkspaceRole; name?: string; color?: string | null }) {
+  if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
+    return <span className="rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: `${color}26`, color }}>{name || roleLabel(role)}</span>;
+  }
+  return <span className={cn("rounded-md px-2 py-0.5 text-xs font-medium", roleCls[role])}>{name || roleLabel(role)}</span>;
 }
 
 export function MemberAvatar({ name, image, className }: { name?: string; image?: string; className?: string }) {

@@ -29,6 +29,9 @@ export interface WorkspaceMember {
   joinedAt?: string;
   addedVia?: "owner" | "invite" | "manual";
   profile?: MemberProfile;
+  roleRefId?: string | null;
+  roleName?: string;
+  roleColor?: string | null;
 }
 
 export type ProjectStatus = "Planning" | "Active" | "On Hold" | "Completed" | "Cancelled" | "Archived";
@@ -663,6 +666,9 @@ export interface MemberDetail {
     _id: string;
     workspaceId: string;
     role: WorkspaceRole;
+    roleRefId?: string | null;
+    roleName?: string;
+    roleColor?: string | null;
     status: "active" | "deactivated" | "removed";
     joinedAt?: string;
     addedVia?: string;
@@ -757,4 +763,31 @@ export interface OrgNodeData {
   department?: string;
   role: WorkspaceRole;
   managerUserId: string | null;
+}
+
+export interface PermAction { key: string; perm: string; label: string; requires: string[] }
+export interface PermModule { key: string; label: string; description: string; actions: PermAction[] }
+export interface PermCatalog { modules: PermModule[]; total: number }
+
+export interface AccessRoleItem {
+  _id: string;
+  name: string;
+  description: string;
+  color: string;
+  scope: "all" | "member";
+  systemKey: WorkspaceRole | null;
+  isSystem: boolean;
+  permissions: string[];
+  memberCount: number;
+  locked: boolean;
+  editable: boolean;
+  isMine: boolean;
+  defaultPermissions?: string[];
+}
+
+export interface MyPermissions {
+  role: { id: string | null; key: WorkspaceRole | null; name: string; color: string | null; isOwner: boolean };
+  scope: "all" | "member";
+  legacyRole: WorkspaceRole;
+  permissions: string[];
 }

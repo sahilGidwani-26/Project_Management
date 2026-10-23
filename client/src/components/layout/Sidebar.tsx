@@ -1,4 +1,4 @@
-import { NavLink, useParams } from "react-router-dom";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -14,10 +14,14 @@ import {
   CalendarDays,
   TrendingUp,
   ClipboardList,
+  Lock,
+  type LucideIcon,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
+import { NAV_ACCESS, ruleAllowed } from "@/lib/accessMap";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -27,26 +31,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "react-router-dom";
 
-const navItems = [
-  { to: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "projects", label: "Projects", icon: FolderKanban },
-  { to: "tasks", label: "Tasks", icon: ListChecks },
-  { to: "my-tasks", label: "My Tasks", icon: CheckSquare },
-  { to: "standup", label: "Standup", icon: ClipboardList },
-  { to: "calendar", label: "Calendar", icon: CalendarDays },
-  { to: "chat", label: "Team Chat", icon: MessageSquare },
-  { to: "team", label: "Team", icon: Users },
-    { to: "analytics", label: "Analytics", icon: BarChart3 },
-  { to: "forecast", label: "Forecast", icon: TrendingUp },
-];
+export const NAV_ICONS: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  projects: FolderKanban,
+  tasks: ListChecks,
+  "my-tasks": CheckSquare,
+  standup: ClipboardList,
+  calendar: CalendarDays,
+  chat: MessageSquare,
+  team: Users,
+  analytics: BarChart3,
+  forecast: TrendingUp,
+  roles: Lock,
+};
 
 export function Sidebar() {
   const { workspaceId } = useParams();
   const { workspaces, currentWorkspace } = useWorkspace();
   const { user } = useAuth();
+  const { can, ready, roleName } = usePermissions();
   const navigate = useNavigate();
+
+  // only the pages this person may open
+  const items = ready ? NAV_ACCESS.filter((n) => ruleAllowed(n, can)) : [];
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
@@ -81,21 +89,24 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={`/app/${workspaceId}/${item.to}`}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive ? "bg-primary text-primary-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )
-            }
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </NavLink>
-        ))}
+        {items.map((item) => {
+          const Icon = NAV_ICONS[item.to] || ListChecks;
+          return (
+            <NavLink
+              key={item.to}
+              to={`/app/${workspaceId}/${item.to}`}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive ? "bg-primary text-primary-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </NavLink>
+          );
+        })}
         {user?.isSuperAdmin && (
           <NavLink
             to="/admin"
@@ -123,7 +134,7 @@ export function Sidebar() {
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="truncate text-sm font-medium">{user?.name}</p>
-            <p className="truncate text-xs text-sidebar-foreground/60">{user?.email}</p>
+            <p className="truncate text-xs text-sidebar-foreground/60">{roleName || user?.email}</p>
           </div>
           <Settings className="h-4 w-4 opacity-60" />
         </NavLink>
