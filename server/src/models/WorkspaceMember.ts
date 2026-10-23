@@ -8,6 +8,8 @@ export interface IWorkspaceMember extends Document {
   workspaceId: Types.ObjectId;
   userId: Types.ObjectId;
   role: WorkspaceRole;
+  /** Set only when the person has a custom role. For the built-in roles it stays empty and `role` decides. */
+  roleId?: Types.ObjectId;
   /** "deactivated" = account paused (data stays, no access). "removed" = left the workspace. Only "active" can use the workspace. */
   status: MemberStatus;
   joinedAt: Date;
@@ -44,6 +46,7 @@ const workspaceMemberSchema = new Schema<IWorkspaceMember>(
       enum: ["OWNER", "ADMIN", "PROJECT_MANAGER", "MEMBER", "VIEWER"],
       default: "MEMBER",
     },
+    roleId: { type: Schema.Types.ObjectId, ref: "AccessRole" },
     status: { type: String, enum: ["active", "deactivated", "removed"], default: "active" },
     joinedAt: { type: Date, default: Date.now },
     profile: {
