@@ -18,6 +18,7 @@ import { TimeEntry } from "../models/ProjectExtras";
 import { GithubTaskLink } from "../models/GithubIntegration";
 import { sendMail } from "../utils/mailer";
 import { env } from "../config/env";
+import { attachRoleInfo } from "../services/permissions";
 import {
   accountCreatedEmail, addedToWorkspaceEmail, inviteAcceptedEmail, memberDeactivatedEmail, memberReactivatedEmail,
   memberRemovedEmail, memberRoleChangedEmail, workspaceInviteEmail,
@@ -148,7 +149,7 @@ export const listMembers = catchAsync(async (req: Request, res: Response) => {
     .select(admin ? "-personal" : "-personal -profile.employeeId")
     .populate("userId", admin ? "name email profileImage jobTitle lastLoginAt mustChangePassword" : "name email profileImage jobTitle")
     .lean();
-  return sendSuccess(res, 200, members, "Members");
+    return sendSuccess(res, 200, await attachRoleInfo(workspaceId, members as any[]), "Members");
 });
 
 /** GET /workspaces/:id/members/:memberId: one person's full profile (personal data only for admins and themself). */
@@ -168,7 +169,8 @@ export const getMember = catchAsync(async (req: Request, res: Response) => {
   const openTasks = await Task.countDocuments({ workspaceId, assigneeIds: m.userId._id, status: { $ne: "Done" } });
   const canAdminister = admin && !self && canManageTarget(actor, m.role);
 
-  const { personal, profile, ...rest } = m;
+  const [decorated] = await attachRoleInfo(workspaceId, [m]);
+  const { personal, profile, ...rest } = decorated;
   const user = { ...m.userId };
   if (!admin && !self) delete user.lastLoginAt;
   if (!admin) delete user.mustChangePassword;
@@ -186,7 +188,7 @@ export const getMember = catchAsync(async (req: Request, res: Response) => {
         isSelf: self,
         canEdit: self || (admin && canManageTarget(actor, m.role)),
         canEditAllFields: admin && canManageTarget(actor, m.role),
-        canChangeRole: canAdminister,
+        canChangeRole: !self && (req.access?.perms.has("roles.assign") ?? false) && (actor === "OWNER" || m.role !== "OWNER"),
         canDeactivate: canAdminister && m.status === "active",
         canReactivate: canAdminister && m.status === "deactivated",
         canRemove: canAdminister,

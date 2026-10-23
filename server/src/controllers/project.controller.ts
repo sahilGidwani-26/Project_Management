@@ -109,6 +109,14 @@ export const listProjects = catchAsync(async (req: Request, res: Response) => {
   if (!wm || !WORKSPACE_MANAGERS.includes(wm.role)) {
     and.push({ $or: [{ visibility: { $ne: "private" } }, { members: uid }, { managerId: uid }, { createdBy: uid }] });
   }
+
+    // A role limited to "projects I am in" only lists those projects
+  const access = req.access;
+  if (access && access.scope === "member" && !access.isOwner) {
+    and.push({ $or: [{ members: uid }, { managerId: uid }, { createdBy: uid }] });
+  }
+
+  
   if (and.length) filter.$and = and;
 
   const docs = await Project.find(filter).populate("managerId", "name profileImage").populate("members", "name profileImage");

@@ -1,21 +1,16 @@
 import { NavLink, useParams } from "react-router-dom";
-import { LayoutDashboard, FolderKanban, CheckSquare, MessageSquare, BarChart3, Users, ListChecks, CalendarDays, X } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { to: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "projects", label: "Projects", icon: FolderKanban },
-  { to: "tasks", label: "Tasks", icon: ListChecks },
-  { to: "my-tasks", label: "My Tasks", icon: CheckSquare },
-  { to: "calendar", label: "Calendar", icon: CalendarDays },
-  { to: "chat", label: "Team Chat", icon: MessageSquare },
-  { to: "team", label: "Team", icon: Users },
-  { to: "analytics", label: "Analytics", icon: BarChart3 },
-];
+import { usePermissions } from "@/hooks/usePermissions";
+import { NAV_ACCESS, ruleAllowed } from "@/lib/accessMap";
+import { NAV_ICONS } from "./Sidebar";
 
 export function MobileNav({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { workspaceId } = useParams();
+  const { can, ready } = usePermissions();
   if (!open) return null;
+
+  const items = ready ? NAV_ACCESS.filter((n) => ruleAllowed(n, can)) : [];
 
   return (
     <div className="fixed inset-0 z-50 md:hidden">
@@ -28,22 +23,25 @@ export function MobileNav({ open, onOpenChange }: { open: boolean; onOpenChange:
           </button>
         </div>
         <nav className="space-y-0.5">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={`/app/${workspaceId}/${item.to}`}
-              onClick={() => onOpenChange(false)}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium",
-                  isActive ? "bg-primary text-primary-foreground" : "hover:bg-sidebar-accent"
-                )
-              }
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          ))}
+          {items.map((item) => {
+            const Icon = NAV_ICONS[item.to];
+            return (
+              <NavLink
+                key={item.to}
+                to={`/app/${workspaceId}/${item.to}`}
+                onClick={() => onOpenChange(false)}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium",
+                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-sidebar-accent"
+                  )
+                }
+              >
+                {Icon && <Icon className="h-4 w-4" />}
+                {item.label}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
     </div>

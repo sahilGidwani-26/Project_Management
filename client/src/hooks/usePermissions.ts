@@ -1,28 +1,27 @@
-import { useWorkspace } from "./useWorkspace";
-import { WorkspaceRole } from "@/types";
-
-const MANAGERS: WorkspaceRole[] = ["OWNER", "ADMIN", "PROJECT_MANAGER"];
-const NOT_VIEWER: WorkspaceRole[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "MEMBER"];
+import { usePermissionContext } from "./usePermissionsContext";
 
 /**
- * Mirrors the backend's role checks so the UI can hide/disable actions the
- * user isn't allowed to take. This is a UX convenience only — the backend
- * is the real enforcement point (frontend checks alone are never enough).
+ * Mirrors the backend so the UI can hide what the logged-in person is not allowed to do.
+ * This is a UX convenience only. The backend is the real enforcement point.
+ *
+ * New code: use can("projects.create") / canAny(...) or <Can perm="...">.
+ * The old names below keep working and now follow the person's real role.
  */
 export function usePermissions() {
-  const { currentWorkspace } = useWorkspace();
-  const role = currentWorkspace?.myRole;
+  const ctx = usePermissionContext();
+  const { can } = ctx;
 
   return {
-    role,
-    isViewer: role === "VIEWER",
-    canCreateProject: !!role && MANAGERS.includes(role),
-    canEditProject: !!role && MANAGERS.includes(role),
-    canDeleteProject: role === "OWNER" || role === "ADMIN",
-    canCreateTask: !!role && NOT_VIEWER.includes(role),
-    canEditTask: !!role && NOT_VIEWER.includes(role),
-    canDeleteTask: !!role && MANAGERS.includes(role),
-    canComment: !!role && NOT_VIEWER.includes(role),
-    canManageMembers: role === "OWNER" || role === "ADMIN",
+    ...ctx,
+    role: ctx.legacyRole,
+    isViewer: !can("tasks.create") && !can("tasks.edit"),
+    canCreateProject: can("projects.create"),
+    canEditProject: can("projects.edit"),
+    canDeleteProject: can("projects.delete"),
+    canCreateTask: can("tasks.create"),
+    canEditTask: can("tasks.edit"),
+    canDeleteTask: can("tasks.delete"),
+    canComment: can("tasks.comment"),
+    canManageMembers: can("people.invite"),
   };
 }

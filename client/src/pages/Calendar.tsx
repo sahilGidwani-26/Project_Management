@@ -66,7 +66,8 @@ export default function CalendarPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isViewer } = usePermissions();
+   const { can } = usePermissions();
+  const isViewer = !can("calendar.create");
 
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState(() => new Date());

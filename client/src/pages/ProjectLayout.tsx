@@ -1,24 +1,21 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, AlertTriangle, CheckCircle2, Star } from "lucide-react";
 import { api } from "@/lib/api";
 import { PriorityBadge } from "@/components/common/PriorityBadge";
 import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
+import { NoAccess } from "@/components/permissions/permissionUi";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/hooks/useProject";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PROJECT_TAB_ACCESS, ruleAllowed } from "@/lib/accessMap";
 import { attempt, statusDot } from "@/lib/projectMeta";
 import { cn, formatDate, initials } from "@/lib/utils";
 
 interface ProjectHealth { state: "ON_TRACK" | "NEEDS_ATTENTION" | "AT_RISK"; reasons: string[] }
-
-const tabs = [
-  ["overview", "Overview"], ["board", "Board"], ["list", "List"], ["bugs", "Bugs"], ["releases", "Releases"], ["github", "GitHub"], ["timeline", "Timeline"], ["calendar", "Calendar"],
-  ["sprints", "Sprints"], ["sprint-reports", "Sprint reports"], ["forecast", "Forecast"], ["standup", "Standup"], ["poker", "Poker"], ["files", "Files"], ["discussion", "Discussion"], ["members", "Members"], ["reports", "Reports"],
-  ["time", "Time"], ["risks", "Risks"], ["automation", "Automation"], ["settings", "Settings"],
-] as const;
 
 const healthConfig = {
   ON_TRACK: { label: "On track", icon: CheckCircle2, cls: "text-success" },
@@ -28,6 +25,8 @@ const healthConfig = {
 
 export default function ProjectLayout() {
   const { workspaceId, projectId, project, isAdmin, refresh } = useProject();
+  const { can } = usePermissions();
+  const { pathname } = useLocation();
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: health } = useQuery({
@@ -36,14 +35,22 @@ export default function ProjectLayout() {
     enabled: !!projectId,
   });
   const hc = health ? healthConfig[health.state] : null;
-  const visibleTabs = tabs.filter(([to]) => to !== "settings" || isAdmin);
+
+  // only the tabs this person may open (the Settings tab also needs the project admin role)
+  const visibleTabs = PROJECT_TAB_ACCESS.filter((t) => ruleAllowed(t, can) && (t.to !== "settings" || isAdmin));
+  const tab = pathname.split("/")[5]; // /app/<workspace>/projects/<project>/<tab>
+  const current = PROJECT_TAB_ACCESS.find((t) => t.to === tab);
+  const blocked = !!current && (!ruleAllowed(current, can) || (current.to === "settings" && !isAdmin));
+  const nextTab = visibleTabs[0]?.to;
 
   return (
     <div>
       {project?.status === "Archived" && (
         <div className="flex items-center justify-between border-b border-border bg-amber-500/10 px-6 py-2 text-sm">
           <span>This project is archived.</span>
-          {isAdmin && <Button size="sm" variant="outline" onClick={async () => (await attempt(() => api.post(`/projects/${projectId}/restore`), "Project restored")) && refresh()}>Restore</Button>}
+          {isAdmin && can("projects.archive") && (
+            <Button size="sm" variant="outline" onClick={async () => (await attempt(() => api.post(`/projects/${projectId}/restore`), "Project restored")) && refresh()}>Restore</Button>
+          )}
         </div>
       )}
 
@@ -83,7 +90,7 @@ export default function ProjectLayout() {
                 <span className={cn("text-sm font-medium", hc.cls)}>{hc.label}</span>
               </div>
             )}
-            {isAdmin && <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>Edit</Button>}
+            {isAdmin && can("projects.edit") && <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>Edit</Button>}
           </div>
         </div>
 
@@ -92,7 +99,7 @@ export default function ProjectLayout() {
         )}
 
         <nav className="-mb-px mt-3 flex gap-1 overflow-x-auto">
-          {visibleTabs.map(([to, label]) => (
+          {visibleTabs.map(({ to, label }) => (
             <NavLink key={to} to={`/app/${workspaceId}/projects/${projectId}/${to}`}
               className={({ isActive }) => cn("shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors", isActive ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
               {label}
@@ -101,7 +108,7 @@ export default function ProjectLayout() {
         </nav>
       </div>
 
-      <Outlet />
+      {blocked ? <NoAccess page={current?.label} workspaceId={workspaceId} next={nextTab ? `projects/${projectId}/${nextTab}` : "projects"} /> : <Outlet />}
       {project && <ProjectFormDialog open={editOpen} onOpenChange={setEditOpen} workspaceId={workspaceId} project={project} />}
     </div>
   );

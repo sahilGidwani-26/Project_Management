@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
-import { loadWorkspaceRole, requireWorkspaceRole } from "../middleware/workspaceRole";
 import { validate } from "../middleware/validate";
 import { createWorkspaceSchema, inviteMemberSchema } from "../validations/workspace.validation";
 import { bulkImportSchema, createMemberSchema, updateMemberSchema } from "../validations/people.validation";
@@ -25,6 +24,8 @@ import {
   cancelInvitation,
   acceptInvitation,
 } from "../controllers/workspace.controller";
+import { loadWorkspaceRole, requireWorkspaceRole, requirePermission } from "../middleware/workspaceRole";
+import { assignRole, createRole, deleteRole, getCatalog, listRoles, myPermissions, resetRole, updateRole } from "../controllers/roles.controller";
 import { addToProject, bulkImport, exportMembers, listDepartments, orgChart } from "../controllers/peopleBulk.controller";
 
 const router = Router();
@@ -37,6 +38,17 @@ const managers = requireWorkspaceRole("OWNER", "ADMIN", "PROJECT_MANAGER");
 router.post("/", validate(createWorkspaceSchema), createWorkspace);
 router.get("/", listMyWorkspaces);
 router.post("/invitations/:token/accept", acceptInvitation);
+
+
+/* ---- roles & permissions ---- */
+router.get("/:workspaceId/permissions/me", loadWorkspaceRole, myPermissions);
+router.get("/:workspaceId/permissions/catalog", loadWorkspaceRole, getCatalog);
+router.get("/:workspaceId/roles", loadWorkspaceRole, requirePermission("roles.view"), listRoles);
+router.post("/:workspaceId/roles", loadWorkspaceRole, requirePermission("roles.manage"), createRole);
+router.patch("/:workspaceId/roles/:roleId", loadWorkspaceRole, requirePermission("roles.manage"), updateRole);
+router.post("/:workspaceId/roles/:roleId/reset", loadWorkspaceRole, requirePermission("roles.manage"), resetRole);
+router.delete("/:workspaceId/roles/:roleId", loadWorkspaceRole, requirePermission("roles.manage"), deleteRole);
+router.put("/:workspaceId/members/:memberId/role", loadWorkspaceRole, requirePermission("roles.assign"), assignRole);
 
 router.get("/:workspaceId", loadWorkspaceRole, getWorkspace);
 router.patch("/:workspaceId", loadWorkspaceRole, admins, updateWorkspace);

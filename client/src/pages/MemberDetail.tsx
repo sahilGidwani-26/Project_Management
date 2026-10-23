@@ -3,9 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
-import { MemberDetail as Detail, MemberProgress, WorkspaceMember, WorkspaceRole } from "@/types";
+import { MemberDetail as Detail, MemberProgress, WorkspaceMember } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
-import { useWorkspace } from "@/hooks/useWorkspace";
+// import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWorkspaceMembers } from "@/hooks/useProject";
 import { EditProfileDialog } from "@/components/people/EditProfileDialog";
 import { CredentialsDialog, MemberAvatar, RoleBadge } from "@/components/people/peopleUi";
@@ -18,9 +18,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { assignableRoles, employmentLabel, roleLabel } from "@/lib/people";
 import { attempt, fmtMinutes, taskStatusColor, timeAgo } from "@/lib/projectMeta";
 import { cn, formatDate } from "@/lib/utils";
+import { employmentLabel } from "@/lib/people";
+import { RoleSelect } from "@/components/people/RoleSelect";
 
 const Row = ({ label, value }: { label: string; value?: React.ReactNode }) => (
   <div className="flex justify-between gap-4 border-b border-border py-2 text-sm last:border-0">
@@ -195,8 +196,8 @@ export default function MemberDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const { currentWorkspace } = useWorkspace();
-  const myRole = currentWorkspace?.myRole as WorkspaceRole | undefined;
+  // const { currentWorkspace } = useWorkspace();
+  // const myRole = currentWorkspace?.myRole as WorkspaceRole | undefined;
   const { data: members } = useWorkspaceMembers(workspaceId);
 
   // "/team/me" is a shortcut to your own profile
@@ -243,8 +244,8 @@ export default function MemberDetail() {
   const candidates = (members || []).filter((x) => x._id !== m._id && x.role !== "VIEWER");
   const title = prof?.designation || m.userId.jobTitle;
 
-  const changeRole = async (role: string) => {
-    if (await attempt(() => api.patch(base, { role }), "Role updated")) refresh();
+   const changeRole = async (roleId: string) => {
+    if (await attempt(() => api.put(`${base}/role`, { roleId }), "Role updated")) refresh();
   };
 
   const deactivate = async (reassignTo?: string) => {
@@ -306,12 +307,21 @@ export default function MemberDetail() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {p.canChangeRole && (
-                <Select value={m.role} onValueChange={changeRole}>
-                  <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>{assignableRoles(myRole).map((r) => <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>)}</SelectContent>
-                </Select>
-              )}
+             
+{p.canChangeRole && (
+  <RoleSelect
+    workspaceId={workspaceId!}
+    value={m.roleRefId || ""}
+    onChange={changeRole}
+  />
+)}
+
+<RoleBadge
+  role={m.role}
+  name={m.roleName}
+  color={m.roleColor}
+/>
+
               {p.canEdit && <Button size="sm" onClick={() => setEditOpen(true)}>Edit profile</Button>}
               {p.canReactivate && <Button size="sm" variant="outline" onClick={async () => (await attempt(() => api.post(`${base}/reactivate`), "Member reactivated")) && refresh()}>Reactivate</Button>}
               {p.canDeactivate && <Button size="sm" variant="outline" onClick={() => setDeactivateOpen(true)}>Deactivate</Button>}
