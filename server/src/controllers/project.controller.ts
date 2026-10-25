@@ -9,13 +9,14 @@ import { ProjectTemplate } from "../models/ProjectTemplate";
 import { Milestone, RiskIssue } from "../models/ProjectExtras";
 // ASSUMPTION: apne workspace-membership model ka path set karo.
 import { WorkspaceMember } from "../models/WorkspaceMember";
-import { PReq, fail, WORKSPACE_MANAGERS } from "../utils/projectAccess";
+import { PReq, fail, WORKSPACE_MANAGERS, resolveProjectRole } from "../utils/projectAccess";
 import { getName, logActivity, projectRecipients, sendToUsers, uniqueIds } from "../services/projectEvents";
 import { BUILT_IN_TEMPLATES, applyTemplate, createTasksBulk, purgeProject } from "../services/projectOps";
 import {
   buildProjectUrl, projectArchivedEmail, projectDeletedEmail, projectMemberAddedEmail, projectMemberRemovedEmail,
   projectRoleChangedEmail, projectStatusChangedEmail, projectUpdatedEmail,
 } from "../utils/projectEmailTemplates";
+import { getAccess } from "../services/permissions";
 
 const EDITABLE = [
   "name", "description", "managerId", "status", "priority", "startDate", "endDate", "color", "icon", "coverImage",
@@ -337,10 +338,13 @@ export const duplicateProject = catchAsync(async (req: Request, res: Response) =
 export const bulkUpdate = catchAsync(async (req: Request, res: Response) => {
   const uid = req.user!.id;
   const { workspaceId, ids, action, status } = req.body;
+    const need = action === "status" ? "projects.edit" : "projects.archive";
+  if (!req.access!.perms.has(need)) return fail(res, "You do not have permission to do this", 403);
   const projects = await Project.find({ _id: { $in: ids }, workspaceId });
   const byName = await getName(uid);
   let n = 0;
   for (const p of projects) {
+        if (!(await resolveProjectRole(p, uid, req.access))) continue; // projects the person cannot open are left alone
     if (action === "archive" && p.status !== "Archived") {
       p.previousStatus = p.status; p.status = "Archived"; p.archivedAt = new Date();
       void sendToUsers(projectRecipients(p), uid, () => projectArchivedEmail({ projectName: p.name, byName, archived: true, url: urlOf(p) }));
@@ -361,7 +365,13 @@ export const bulkUpdate = catchAsync(async (req: Request, res: Response) => {
 export const bulkDelete = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId, ids } = req.body;
   const projects = await Project.find({ _id: { $in: ids }, workspaceId });
-  for (const p of projects) await deleteWithEmail(p, req.user!.id);
+    let n = 0;
+  for (const p of projects) {
+    if (!(await resolveProjectRole(p, req.user!.id, req.access))) continue;
+    await deleteWithEmail(p, req.user!.id);
+    n++;
+  }
+  return sendSuccess(res, 200, { deleted: n }, `${n} project(s) deleted`);
   return sendSuccess(res, 200, { deleted: projects.length }, `${projects.length} project(s) deleted`);
 });
 
@@ -440,8 +450,8 @@ export const saveAsTemplate = catchAsync(async (req: Request, res: Response) => 
 export const deleteTemplate = catchAsync(async (req: Request, res: Response) => {
   const tpl: any = await ProjectTemplate.findById(req.params.templateId);
   if (!tpl) throw ApiError.notFound("Template not found");
-  const wm: any = await WorkspaceMember.findOne({ workspaceId: tpl.workspaceId, userId: req.user!.id }).select("role");
-  if (!wm || !WORKSPACE_MANAGERS.includes(wm.role)) return fail(res, "Not allowed", 403);
+    const a = await getAccess(tpl.workspaceId, req.user!.id);
+  if (!a || !a.perms.has("projects.templates")) return fail(res, "You do not have permission to delete templates", 403);
   await tpl.deleteOne();
   return sendSuccess(res, 200, null, "Template deleted");
 });

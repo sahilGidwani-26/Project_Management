@@ -34,12 +34,16 @@ export const commentCrud = makeCrud({
   fields: ["content", "mentions", "pinned"],
   sort: { pinned: -1, createdAt: 1 },
   ownerField: "userId",
+  moderatePerm: "discussion.moderate",
   populate: [{ path: "userId", select: "name profileImage" }, { path: "mentions", select: "name" }],
   beforeCreate: async (r, d) => {
     d.userId = actor(r);
     d.mentions = await validMentions(r, d.mentions);
   },
-  beforeUpdate: async (r, d, doc) => {
+    beforeUpdate: async (r, d, doc) => {
+    if ("pinned" in d && d.pinned !== doc.pinned && !r.access?.perms.has("discussion.moderate")) {
+      throw ApiError.forbidden("Only moderators can pin messages");
+    }
     if ("mentions" in d) d.mentions = await validMentions(r, d.mentions);
     if ("content" in d && d.content !== doc.content) d.editedAt = new Date();
   },
@@ -99,7 +103,7 @@ export const deleteFile = catchAsync(async (req: Request, res: Response) => {
   const r = req as PReq;
   const f = await ProjectFile.findOne({ _id: req.params.itemId, projectId: r.project._id });
   if (!f) throw ApiError.notFound("File not found");
-  if (String(f.uploadedBy) !== actor(r) && r.projectRole !== "ADMIN") return fail(res, "Only the uploader or a project admin can delete this file", 403);
+  if (String(f.uploadedBy) !== actor(r) && !r.access?.perms.has("files.delete")) return fail(res, "You can delete your own uploads. Deleting other people's files needs the “Delete files” permission", 403);
   await fs.promises.unlink(path.join(UPLOAD_DIR, path.basename(f.storedName))).catch(() => undefined);
   await f.deleteOne();
   await logActivity({ workspaceId: r.project.workspaceId, projectId: r.project._id, actorId: actor(r), action: "file_deleted", entity: "file", metadata: { title: f.fileName } });

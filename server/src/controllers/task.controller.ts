@@ -16,6 +16,9 @@ import { projectLeads, sendToUsers } from "../services/projectEvents";
 import { getBlockers, runAutomations } from "../services/automation";
 import { Server as SocketIOServer } from "socket.io";
 import { Release } from "../models/ProjectExtras";
+import { getAccess, isManagerLevel } from "../services/permissions";
+import { resolveProjectRole } from "../utils/projectAccess";
+import { assertCan, assertCanAssign, assertProjectWritable } from "../services/taskGuard";
 
 function getIO(req: Request): SocketIOServer {
   return req.app.get("io");
@@ -128,6 +131,9 @@ export const createTask = catchAsync(async (req: Request, res: Response) => {
   };
 
   const orderScope = projectId ? { projectId, status } : { workspaceId, projectId: { $exists: false }, status };
+  assertCan(req, { type }, "create"); // Bugs need "Report bugs", other tasks need "Create tasks"
+  assertCanAssign(req, assigneeIds, req.user!.id);
+  if (projectId) await assertProjectWritable(req, projectId, workspaceId);
   const lastTask = await Task.findOne(orderScope).sort({ order: -1 });
   const order = (lastTask?.order ?? 0) + 1;
 
@@ -231,20 +237,37 @@ export const listTasks = catchAsync(async (req: Request, res: Response) => {
   } = req.query as Record<string, string>;
 
   const isValidObjectId = (v?: string) => !!v && /^[0-9a-fA-F]{24}$/.test(v);
+  const uid = req.user!.id;
 
   if (!isValidObjectId(workspaceId) && !isValidObjectId(projectId)) {
     throw ApiError.badRequest("workspaceId or projectId is required");
   }
 
-  const effectiveWorkspaceId = isValidObjectId(workspaceId) ? workspaceId : undefined;
-  if (effectiveWorkspaceId) {
-    const member = await WorkspaceMember.findOne({ workspaceId: effectiveWorkspaceId, userId: req.user!.id, status: "active" });
-    if (!member) throw ApiError.forbidden("You are not a member of this workspace");
+  // 1) which workspace, and is the person in it?
+  let wsId = isValidObjectId(workspaceId) ? workspaceId : undefined;
+  let project: any = null;
+  if (isValidObjectId(projectId)) {
+    project = await Project.findById(projectId);
+    if (!project) throw ApiError.notFound("Project not found");
+    if (wsId && String(project.workspaceId) !== wsId) throw ApiError.badRequest("That project belongs to another workspace");
+    wsId = String(project.workspaceId);
   }
+  const access = await getAccess(wsId, uid);
+  if (!access) throw ApiError.forbidden("You are not a member of this workspace");
 
-  const filter: Record<string, unknown> = {};
-  if (isValidObjectId(workspaceId)) filter.workspaceId = workspaceId;
-  if (isValidObjectId(projectId)) filter.projectId = projectId;
+  // 2) tasks and bugs have separate "view" permissions
+  const canTasks = access.perms.has("tasks.view");
+  const canBugs = access.perms.has("bugs.view");
+  if (!canTasks && !canBugs) throw ApiError.forbidden("You do not have permission to view tasks");
+  if (type === "Bug" && !canBugs) throw ApiError.forbidden("You do not have permission to view bugs");
+  if (type && type !== "Bug" && !canTasks) throw ApiError.forbidden("You do not have permission to view tasks");
+
+  // 3) a single project: must be allowed to open it
+  if (project && !(await resolveProjectRole(project, uid, access))) throw ApiError.forbidden("You do not have access to this project");
+
+  const filter: Record<string, unknown> = { workspaceId: wsId };
+  const and: Record<string, unknown>[] = [];
+  if (project) filter.projectId = project._id;
   if (projectId === "none") filter.projectId = { $exists: false };
   if (isValidObjectId(assigneeId)) filter.assigneeIds = assigneeId;
   if (isValidObjectId(createdBy)) filter.createdBy = createdBy;
@@ -256,6 +279,22 @@ export const listTasks = catchAsync(async (req: Request, res: Response) => {
   if (type === "Task") filter.type = { $in: ["Task", null] };
   else if (type) filter.type = type;
   if (severity) filter["bugDetails.severity"] = severity;
+  if (!canBugs) and.push({ type: { $ne: "Bug" } });
+  if (!canTasks) and.push({ type: "Bug" });
+
+  // 4) whole-workspace lists: hide private projects the person is not in, and respect "only my projects" roles
+  if (!project) {
+    const mine = [{ members: uid }, { managerId: uid }, { createdBy: uid }];
+    if (!isManagerLevel(access)) {
+      const hidden = await Project.find({ workspaceId: wsId, visibility: "private", $nor: mine }).distinct("_id");
+      if (hidden.length) and.push({ $or: [{ projectId: { $exists: false } }, { projectId: { $nin: hidden } }] });
+    }
+    if (access.scope === "member" && !access.isOwner) {
+      const inProjects = await Project.find({ workspaceId: wsId, $or: mine }).distinct("_id");
+      and.push({ $or: [{ projectId: { $in: inProjects } }, { assigneeIds: uid }, { createdBy: uid }] });
+    }
+  }
+  if (and.length) filter.$and = and;
 
   const sortMap: Record<string, Record<string, 1 | -1>> = {
     dueDate: { dueDate: 1 },
@@ -286,12 +325,14 @@ export const getTask = catchAsync(async (req: Request, res: Response) => {
     .populate("projectId", "name color")
     .populate("dependencies", "title status");
   if (!task) throw ApiError.notFound("Task not found");
+    assertCan(req, task, "view");
   return sendSuccess(res, 200, task, "Task");
 });
 
 export const updateTask = catchAsync(async (req: Request, res: Response) => {
   const previous = await Task.findById(req.params.taskId);
   if (!previous) throw ApiError.notFound("Task not found");
+    assertCan(req, previous, "edit");
 
   const patch: Record<string, unknown> = {};
   UPDATABLE.forEach((k) => {
@@ -301,6 +342,14 @@ export const updateTask = catchAsync(async (req: Request, res: Response) => {
     if (patch.releaseId) {
     const ok = previous.projectId && (await Release.exists({ _id: patch.releaseId, projectId: previous.projectId }));
     if (!ok) throw ApiError.badRequest("That release does not belong to this task's project");
+  }
+
+  if (patch.type !== undefined && (patch.type === "Bug") !== (previous.type === "Bug")) assertCan(req, { type: String(patch.type) }, "edit"); // moving between task and bug
+  if (patch.assigneeIds) {
+    const next = new Set((patch.assigneeIds as unknown[]).map(String));
+    const prev = new Set(previous.assigneeIds.map(String));
+    const changed = [...next].filter((i) => !prev.has(i)).concat([...prev].filter((i) => !next.has(i)));
+    assertCanAssign(req, changed, req.user!.id);
   }
 
   const statusChanged = typeof patch.status === "string" && patch.status !== previous.status;
@@ -347,6 +396,9 @@ export const updateTask = catchAsync(async (req: Request, res: Response) => {
 
 export const updateTaskStatus = catchAsync(async (req: Request, res: Response) => {
   const { status, order } = req.body;
+    const existing: any = await Task.findById(req.params.taskId).select("type");
+  if (!existing) throw ApiError.notFound("Task not found");
+  assertCan(req, existing, "edit");
 
   const blockers = await getBlockers(req.params.taskId, status);
   if (blockers.length) throw ApiError.badRequest(`Blocked by: ${blockers.join(", ")}`);
@@ -400,6 +452,9 @@ export const updateTaskStatus = catchAsync(async (req: Request, res: Response) =
 });
 
 export const deleteTask = catchAsync(async (req: Request, res: Response) => {
+  const existing: any = await Task.findById(req.params.taskId).select("type");
+  if (!existing) throw ApiError.notFound("Task not found");
+  assertCan(req, existing, "delete");
   const task = await Task.findByIdAndDelete(req.params.taskId);
   if (task) getIO(req).to(`project:${task.projectId || "none"}`).emit("task:deleted", { taskId: task._id });
   return sendSuccess(res, 200, null, "Task deleted");

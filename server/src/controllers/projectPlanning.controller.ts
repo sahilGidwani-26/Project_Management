@@ -232,6 +232,7 @@ export const timeCrud = makeCrud({
   fields: ["taskId", "minutes", "note", "date", "billable"],
   sort: { date: -1, createdAt: -1 },
   ownerField: "userId",
+  moderatePerm: "time.delete",
   populate: [{ path: "userId", select: "name profileImage" }, { path: "taskId", select: "title taskNumber" }],
   beforeCreate: async (r, d) => {
     d.userId = d.createdBy;
