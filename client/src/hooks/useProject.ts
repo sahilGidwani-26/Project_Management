@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Project, ProjectStats, Task, WorkspaceMember } from "@/types";
+import { usePermissions } from "./usePermissions";
 
 /** URL wala current project + usme caller ka role. */
 export function useProject() {
@@ -14,6 +15,7 @@ export function useProject() {
   });
   const project = q.data?.project;
   const role = project?.myRole;
+  const perm = usePermissions();
   return {
     workspaceId: workspaceId!,
     projectId: projectId!,
@@ -21,8 +23,10 @@ export function useProject() {
     stats: q.data?.stats,
     role,
     isLoading: q.isLoading,
-    canEdit: role === "ADMIN" || role === "MEMBER",
-    isAdmin: role === "ADMIN",
+    canEdit:
+      (role === "ADMIN" || role === "MEMBER") &&
+      perm.canAny("tasks.create", "tasks.edit", "bugs.edit", "discussion.post", "files.upload", "time.log", "milestones.edit", "sprints.edit", "risks.edit", "releases.edit"),
+    isAdmin: role === "ADMIN" || perm.can("projects.edit"),
     refresh: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ["project", projectId] }),

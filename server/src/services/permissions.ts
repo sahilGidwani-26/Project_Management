@@ -189,3 +189,6 @@ export async function attachRoleInfo(workspaceId: string, members: any[]) {
     return { ...m, roleRefId: r ? String(r._id) : null, roleName: r?.name || m.role, roleColor: r?.color || null };
   });
 }
+
+/** Owner, Admin and Project Manager level people (and custom roles that are as strong as those) see every project, private ones too. */
+export const isManagerLevel = (a: AccessCtx) => a.isOwner || ["OWNER", "ADMIN", "PROJECT_MANAGER"].includes(a.legacyRole);

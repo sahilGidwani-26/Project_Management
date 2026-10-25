@@ -1,7 +1,6 @@
-import { Router } from "express";
+import { RequestHandler, Router } from "express";
 import { requireAuth } from "../middleware/auth";
-import { loadWorkspaceRole, requireWorkspaceRole } from "../middleware/workspaceRole";
-import { loadProjectWorkspaceRole, MANAGERS_ONLY } from "../middleware/taskAccess";
+import { loadWorkspaceRole, requireAnyPermission, requirePermission } from "../middleware/workspaceRole";
 import { validate } from "../middleware/validate";
 import { projectAccess } from "../utils/projectAccess";
 import { bulkSchema, createProjectSchema, memberSchema, timeEntrySchema, updateProjectSchema } from "../validations/project.validation";
@@ -18,138 +17,135 @@ import * as pk from "../controllers/projectPoker.controller";
 const router = Router();
 router.use(requireAuth);
 
-const view = projectAccess("VIEWER");
-const edit = projectAccess("MEMBER");
-const admin = projectAccess("ADMIN");
+type Min = "VIEWER" | "MEMBER";
+/** Opens the project (private / "only my projects" rules) and needs ALL listed permissions. "MEMBER" also blocks people who are read-only viewers of this project. */
+const gate = (min: Min, ...perms: string[]): RequestHandler[] => [projectAccess(min), requirePermission(...perms)];
+/** Same, but ONE of the listed permissions is enough. */
+const gateAny = (min: Min, ...perms: string[]): RequestHandler[] => [projectAccess(min), requireAnyPermission(...perms)];
 
 /* ---- workspace-level ---- */
-router.post("/", validate(createProjectSchema), loadWorkspaceRole, requireWorkspaceRole(...MANAGERS_ONLY), core.createProject);
-router.get("/workspace/:workspaceId", loadWorkspaceRole, core.listProjects);
-router.get("/templates/:workspaceId", loadWorkspaceRole, core.listTemplates);
-router.delete("/templates/:templateId", core.deleteTemplate);
-router.post("/bulk/update", validate(bulkSchema), loadWorkspaceRole, requireWorkspaceRole(...MANAGERS_ONLY), core.bulkUpdate);
-router.post("/bulk/delete", validate(bulkSchema), loadWorkspaceRole, requireWorkspaceRole("OWNER", "ADMIN"), core.bulkDelete);
+router.post("/", validate(createProjectSchema), loadWorkspaceRole, requirePermission("projects.create"), core.createProject);
+router.get("/workspace/:workspaceId", loadWorkspaceRole, requirePermission("projects.view"), core.listProjects);
+router.get("/templates/:workspaceId", loadWorkspaceRole, requirePermission("projects.create"), core.listTemplates);
+router.delete("/templates/:templateId", core.deleteTemplate); // checks projects.templates inside
+router.post("/bulk/update", validate(bulkSchema), loadWorkspaceRole, requireAnyPermission("projects.edit", "projects.archive"), core.bulkUpdate);
+router.post("/bulk/delete", validate(bulkSchema), loadWorkspaceRole, requirePermission("projects.delete"), core.bulkDelete);
 
 /* ---- project ---- */
 const P = "/:projectId";
-router.get(P, view, core.getProject);
-router.patch(P, validate(updateProjectSchema), admin, core.updateProject);
-router.delete(P, loadProjectWorkspaceRole, requireWorkspaceRole("OWNER", "ADMIN"), admin, core.deleteProject);
-router.post(`${P}/archive`, admin, core.archiveProject);
-router.post(`${P}/restore`, admin, core.restoreProject);
-router.post(`${P}/duplicate`, admin, core.duplicateProject);
-router.post(`${P}/favorite`, view, core.toggleFavorite);
-router.post(`${P}/save-as-template`, admin, core.saveAsTemplate);
-router.get(`${P}/export`, view, core.exportProject);
-router.get(`${P}/activity`, view, collab.listActivity);
-router.get(`${P}/reports`, view, collab.getReports);
+router.get(P, ...gate("VIEWER", "projects.view"), core.getProject);
+router.patch(P, validate(updateProjectSchema), ...gate("MEMBER", "projects.edit"), core.updateProject);
+router.delete(P, ...gate("MEMBER", "projects.delete"), core.deleteProject);
+router.post(`${P}/archive`, ...gate("MEMBER", "projects.archive"), core.archiveProject);
+router.post(`${P}/restore`, ...gate("MEMBER", "projects.archive"), core.restoreProject);
+router.post(`${P}/duplicate`, ...gate("MEMBER", "projects.create", "projects.templates"), core.duplicateProject);
+router.post(`${P}/favorite`, ...gate("VIEWER", "projects.view"), core.toggleFavorite);
+router.post(`${P}/save-as-template`, ...gate("MEMBER", "projects.templates"), core.saveAsTemplate);
+router.get(`${P}/export`, ...gate("VIEWER", "projects.export"), core.exportProject);
+router.get(`${P}/activity`, ...gate("VIEWER", "projects.view"), collab.listActivity);
+router.get(`${P}/reports`, ...gate("VIEWER", "reports.view"), collab.getReports);
 
-/* ---- members & roles ---- */
-router.post(`${P}/members`, validate(memberSchema), admin, core.addMember);
-router.patch(`${P}/members/:userId`, validate(memberSchema), admin, core.updateMemberRole);
-router.delete(`${P}/members/:userId`, admin, core.removeMember);
+/* ---- members & roles of the project ---- */
+router.post(`${P}/members`, validate(memberSchema), ...gate("MEMBER", "projects.members"), core.addMember);
+router.patch(`${P}/members/:userId`, validate(memberSchema), ...gate("MEMBER", "projects.members"), core.updateMemberRole);
+router.delete(`${P}/members/:userId`, ...gate("MEMBER", "projects.members"), core.removeMember);
 
 /* ---- milestones ---- */
-router.get(`${P}/milestones`, view, plan.listMilestones);
-router.post(`${P}/milestones`, edit, plan.milestoneCrud.create);
-router.patch(`${P}/milestones/:itemId`, edit, plan.milestoneCrud.update);
-router.delete(`${P}/milestones/:itemId`, edit, plan.milestoneCrud.remove);
-router.put(`${P}/milestones/:itemId/tasks`, edit, plan.setMilestoneTasks);
-router.post(`${P}/milestones/:itemId/toggle`, edit, plan.toggleMilestone);
+router.get(`${P}/milestones`, ...gate("VIEWER", "milestones.view"), plan.listMilestones);
+router.post(`${P}/milestones`, ...gate("MEMBER", "milestones.edit"), plan.milestoneCrud.create);
+router.patch(`${P}/milestones/:itemId`, ...gate("MEMBER", "milestones.edit"), plan.milestoneCrud.update);
+router.delete(`${P}/milestones/:itemId`, ...gate("MEMBER", "milestones.delete"), plan.milestoneCrud.remove);
+router.put(`${P}/milestones/:itemId/tasks`, ...gate("MEMBER", "milestones.edit"), plan.setMilestoneTasks);
+router.post(`${P}/milestones/:itemId/toggle`, ...gate("MEMBER", "milestones.edit"), plan.toggleMilestone);
 
 /* ---- sprints ---- */
-router.get(`${P}/sprints`, view, plan.sprintCrud.list);
-router.post(`${P}/sprints`, edit, plan.sprintCrud.create);
-router.patch(`${P}/sprints/:itemId`, edit, plan.sprintCrud.update);
-router.delete(`${P}/sprints/:itemId`, edit, plan.sprintCrud.remove);
-router.put(`${P}/sprints/:itemId/tasks`, edit, plan.setSprintTasks);
-router.post(`${P}/sprints/:itemId/start`, edit, plan.startSprint);
-router.post(`${P}/sprints/:itemId/complete`, edit, plan.completeSprint);
+router.get(`${P}/sprints`, ...gate("VIEWER", "sprints.view"), plan.sprintCrud.list);
+router.post(`${P}/sprints`, ...gate("MEMBER", "sprints.edit"), plan.sprintCrud.create);
+router.patch(`${P}/sprints/:itemId`, ...gate("MEMBER", "sprints.edit"), plan.sprintCrud.update);
+router.delete(`${P}/sprints/:itemId`, ...gate("MEMBER", "sprints.delete"), plan.sprintCrud.remove);
+router.put(`${P}/sprints/:itemId/tasks`, ...gate("MEMBER", "sprints.edit"), plan.setSprintTasks);
+router.post(`${P}/sprints/:itemId/start`, ...gate("MEMBER", "sprints.run"), plan.startSprint);
+router.post(`${P}/sprints/:itemId/complete`, ...gate("MEMBER", "sprints.run"), plan.completeSprint);
 
-/* ---- task dependencies ---- */
-router.get(`${P}/dependencies`, view, plan.listDependencies);
-router.post(`${P}/dependencies`, edit, plan.addDependency);
-router.delete(`${P}/dependencies/:itemId`, edit, plan.removeDependency);
+/* ---- task dependencies (timeline) ---- */
+router.get(`${P}/dependencies`, ...gate("VIEWER", "timeline.view"), plan.listDependencies);
+router.post(`${P}/dependencies`, ...gate("MEMBER", "timeline.edit"), plan.addDependency);
+router.delete(`${P}/dependencies/:itemId`, ...gate("MEMBER", "timeline.edit"), plan.removeDependency);
 
-/* ---- time tracking ---- */
-router.get(`${P}/time`, view, plan.timeCrud.list);
-router.post(`${P}/time`, validate(timeEntrySchema), edit, plan.timeCrud.create);
-router.delete(`${P}/time/:itemId`, edit, plan.timeCrud.remove);
+/* ---- time tracking (deleting somebody else's entry also needs time.delete, checked inside) ---- */
+router.get(`${P}/time`, ...gate("VIEWER", "time.view"), plan.timeCrud.list);
+router.post(`${P}/time`, validate(timeEntrySchema), ...gate("MEMBER", "time.log"), plan.timeCrud.create);
+router.delete(`${P}/time/:itemId`, ...gateAny("MEMBER", "time.log", "time.delete"), plan.timeCrud.remove);
 
 /* ---- risks & issues ---- */
-router.get(`${P}/risks`, view, collab.riskCrud.list);
-router.post(`${P}/risks`, edit, collab.riskCrud.create);
-router.patch(`${P}/risks/:itemId`, edit, collab.riskCrud.update);
-router.delete(`${P}/risks/:itemId`, admin, collab.riskCrud.remove);
+router.get(`${P}/risks`, ...gate("VIEWER", "risks.view"), collab.riskCrud.list);
+router.post(`${P}/risks`, ...gate("MEMBER", "risks.edit"), collab.riskCrud.create);
+router.patch(`${P}/risks/:itemId`, ...gate("MEMBER", "risks.edit"), collab.riskCrud.update);
+router.delete(`${P}/risks/:itemId`, ...gate("MEMBER", "risks.delete"), collab.riskCrud.remove);
 
-/* ---- discussion ---- */
-router.get(`${P}/comments`, view, collab.commentCrud.list);
-router.post(`${P}/comments`, edit, collab.commentCrud.create);
-router.patch(`${P}/comments/:itemId`, edit, collab.commentCrud.update);
-router.delete(`${P}/comments/:itemId`, edit, collab.commentCrud.remove);
+/* ---- discussion (editing or deleting other people's messages also needs discussion.moderate, checked inside) ---- */
+router.get(`${P}/comments`, ...gate("VIEWER", "discussion.view"), collab.commentCrud.list);
+router.post(`${P}/comments`, ...gate("MEMBER", "discussion.post"), collab.commentCrud.create);
+router.patch(`${P}/comments/:itemId`, ...gateAny("MEMBER", "discussion.post", "discussion.moderate"), collab.commentCrud.update);
+router.delete(`${P}/comments/:itemId`, ...gateAny("MEMBER", "discussion.post", "discussion.moderate"), collab.commentCrud.remove);
 
-/* ---- files (download authenticated hai, public static folder nahi) ---- */
-router.get(`${P}/files`, view, collab.listFiles);
-router.post(`${P}/files`, edit, collab.upload.array("files", 10), collab.uploadFiles);
-router.get(`${P}/files/:itemId/download`, view, collab.downloadFile);
-router.delete(`${P}/files/:itemId`, edit, collab.deleteFile);
+/* ---- files (deleting somebody else's file also needs files.delete, checked inside) ---- */
+router.get(`${P}/files`, ...gate("VIEWER", "files.view"), collab.listFiles);
+router.post(`${P}/files`, ...gate("MEMBER", "files.upload"), collab.upload.array("files", 10), collab.uploadFiles);
+router.get(`${P}/files/:itemId/download`, ...gate("VIEWER", "files.view"), collab.downloadFile);
+router.delete(`${P}/files/:itemId`, ...gateAny("MEMBER", "files.upload", "files.delete"), collab.deleteFile);
 
-/* ---- automation & recurring tasks ---- */
-router.get(`${P}/automations`, view, plan.ruleCrud.list);
-router.post(`${P}/automations`, admin, plan.ruleCrud.create);
-router.patch(`${P}/automations/:itemId`, admin, plan.ruleCrud.update);
-router.delete(`${P}/automations/:itemId`, admin, plan.ruleCrud.remove);
-router.get(`${P}/recurring`, view, plan.recurringCrud.list);
-router.post(`${P}/recurring`, edit, plan.recurringCrud.create);
-router.patch(`${P}/recurring/:itemId`, edit, plan.recurringCrud.update);
-router.delete(`${P}/recurring/:itemId`, edit, plan.recurringCrud.remove);
-
+/* ---- automation rules & recurring tasks ---- */
+router.get(`${P}/automations`, ...gate("VIEWER", "automation.view"), plan.ruleCrud.list);
+router.post(`${P}/automations`, ...gate("MEMBER", "automation.edit"), plan.ruleCrud.create);
+router.patch(`${P}/automations/:itemId`, ...gate("MEMBER", "automation.edit"), plan.ruleCrud.update);
+router.delete(`${P}/automations/:itemId`, ...gate("MEMBER", "automation.edit"), plan.ruleCrud.remove);
+router.get(`${P}/recurring`, ...gate("VIEWER", "automation.view"), plan.recurringCrud.list);
+router.post(`${P}/recurring`, ...gate("MEMBER", "tasks.create"), plan.recurringCrud.create);
+router.patch(`${P}/recurring/:itemId`, ...gate("MEMBER", "tasks.create"), plan.recurringCrud.update);
+router.delete(`${P}/recurring/:itemId`, ...gate("MEMBER", "tasks.create"), plan.recurringCrud.remove);
 
 /* ---- releases / changelog ---- */
-router.get(`${P}/releases`, view, rel.listReleases);
-router.post(`${P}/releases`, edit, rel.releaseCrud.create);
-router.patch(`${P}/releases/:itemId`, edit, rel.releaseCrud.update);
-router.delete(`${P}/releases/:itemId`, admin, rel.releaseCrud.remove);
-router.put(`${P}/releases/:itemId/tasks`, edit, rel.setReleaseTasks);
-router.post(`${P}/releases/:itemId/add-done`, edit, rel.addDoneTasks);
-router.post(`${P}/releases/:itemId/publish`, admin, rel.publishRelease);
-router.post(`${P}/releases/:itemId/reopen`, admin, rel.reopenRelease);
-router.get(`${P}/releases/:itemId/changelog`, view, rel.getChangelog);
+router.get(`${P}/releases`, ...gate("VIEWER", "releases.view"), rel.listReleases);
+router.post(`${P}/releases`, ...gate("MEMBER", "releases.edit"), rel.releaseCrud.create);
+router.patch(`${P}/releases/:itemId`, ...gate("MEMBER", "releases.edit"), rel.releaseCrud.update);
+router.delete(`${P}/releases/:itemId`, ...gate("MEMBER", "releases.delete"), rel.releaseCrud.remove);
+router.put(`${P}/releases/:itemId/tasks`, ...gate("MEMBER", "releases.edit"), rel.setReleaseTasks);
+router.post(`${P}/releases/:itemId/add-done`, ...gate("MEMBER", "releases.edit"), rel.addDoneTasks);
+router.post(`${P}/releases/:itemId/publish`, ...gate("MEMBER", "releases.publish"), rel.publishRelease);
+router.post(`${P}/releases/:itemId/reopen`, ...gate("MEMBER", "releases.publish"), rel.reopenRelease);
+router.get(`${P}/releases/:itemId/changelog`, ...gate("VIEWER", "releases.view"), rel.getChangelog);
 
-/* ---- GitHub integration (settings are admin-only, activity is visible to members) ---- */
-router.get(`${P}/github`, admin, gh.getIntegration);
-router.put(`${P}/github`, admin, gh.saveIntegration);
-router.delete(`${P}/github`, admin, gh.removeIntegration);
-router.post(`${P}/github/regenerate-secret`, admin, gh.regenerateSecret);
-router.get(`${P}/github/activity`, view, gh.listActivity);
+/* ---- GitHub (the settings page holds the webhook secret, so it needs configure) ---- */
+router.get(`${P}/github`, ...gate("MEMBER", "github.configure"), gh.getIntegration);
+router.put(`${P}/github`, ...gate("MEMBER", "github.configure"), gh.saveIntegration);
+router.delete(`${P}/github`, ...gate("MEMBER", "github.configure"), gh.removeIntegration);
+router.post(`${P}/github/regenerate-secret`, ...gate("MEMBER", "github.configure"), gh.regenerateSecret);
+router.get(`${P}/github/activity`, ...gate("VIEWER", "github.view"), gh.listActivity);
 
-/* ---- sprint reports ---- */
-router.get(`${P}/sprint-reports`, view, sr.sprintOverview);
-router.get(`${P}/sprint-reports/flow`, view, sr.flowReport);
-router.get(`${P}/sprint-reports/sprints/:sprintId`, view, sr.sprintDetail);
+/* ---- sprint reports, forecast, standup ---- */
+router.get(`${P}/sprint-reports`, ...gate("VIEWER", "sprint_reports.view"), sr.sprintOverview);
+router.get(`${P}/sprint-reports/flow`, ...gate("VIEWER", "sprint_reports.view"), sr.flowReport);
+router.get(`${P}/sprint-reports/sprints/:sprintId`, ...gate("VIEWER", "sprint_reports.view"), sr.sprintDetail);
+router.get(`${P}/forecast`, ...gate("VIEWER", "forecast.view"), fc.projectForecast);
+router.get(`${P}/forecast/history`, ...gate("VIEWER", "forecast.view"), fc.forecastHistory);
+router.get(`${P}/standup`, ...gate("VIEWER", "standup.team"), st.projectStandup);
 
-/* ---- delivery forecast ---- */
-router.get(`${P}/forecast`, view, fc.projectForecast);
-router.get(`${P}/forecast/history`, view, fc.forecastHistory);
-
-/* ---- team standup ---- */
-router.get(`${P}/standup`, view, st.projectStandup);
-
-/* ---- planning poker ---- */
-router.get(`${P}/poker`, view, pk.pokerOverview);
-router.get(`${P}/poker/accuracy`, view, pk.accuracy);
-router.post(`${P}/poker/sessions`, edit, pk.createSession);
-router.get(`${P}/poker/sessions/:sessionId`, view, pk.sessionState);
-router.post(`${P}/poker/sessions/:sessionId/join`, edit, pk.joinSession);
-router.post(`${P}/poker/sessions/:sessionId/leave`, edit, pk.leaveSession);
-router.post(`${P}/poker/sessions/:sessionId/take-over`, admin, pk.takeOver);
-router.put(`${P}/poker/sessions/:sessionId/queue`, edit, pk.editQueue);
-router.post(`${P}/poker/sessions/:sessionId/start-task`, edit, pk.startTask);
-router.post(`${P}/poker/sessions/:sessionId/vote`, edit, pk.vote);
-router.post(`${P}/poker/sessions/:sessionId/reveal`, edit, pk.reveal);
-router.post(`${P}/poker/sessions/:sessionId/revote`, edit, pk.revote);
-router.post(`${P}/poker/sessions/:sessionId/finalize`, edit, pk.finalize);
-router.post(`${P}/poker/sessions/:sessionId/skip`, edit, pk.skip);
-router.post(`${P}/poker/sessions/:sessionId/end`, edit, pk.endSession);
+/* ---- planning poker (running someone else's session is limited to the facilitator and project admins, checked inside) ---- */
+router.get(`${P}/poker`, ...gate("VIEWER", "poker.view"), pk.pokerOverview);
+router.get(`${P}/poker/accuracy`, ...gate("VIEWER", "poker.view"), pk.accuracy);
+router.post(`${P}/poker/sessions`, ...gate("MEMBER", "poker.facilitate"), pk.createSession);
+router.get(`${P}/poker/sessions/:sessionId`, ...gate("VIEWER", "poker.view"), pk.sessionState);
+router.post(`${P}/poker/sessions/:sessionId/join`, ...gate("MEMBER", "poker.vote"), pk.joinSession);
+router.post(`${P}/poker/sessions/:sessionId/leave`, ...gate("MEMBER", "poker.vote"), pk.leaveSession);
+router.post(`${P}/poker/sessions/:sessionId/take-over`, ...gate("MEMBER", "poker.facilitate"), pk.takeOver);
+router.put(`${P}/poker/sessions/:sessionId/queue`, ...gate("MEMBER", "poker.facilitate"), pk.editQueue);
+router.post(`${P}/poker/sessions/:sessionId/start-task`, ...gate("MEMBER", "poker.facilitate"), pk.startTask);
+router.post(`${P}/poker/sessions/:sessionId/vote`, ...gate("MEMBER", "poker.vote"), pk.vote);
+router.post(`${P}/poker/sessions/:sessionId/reveal`, ...gate("MEMBER", "poker.facilitate"), pk.reveal);
+router.post(`${P}/poker/sessions/:sessionId/revote`, ...gate("MEMBER", "poker.facilitate"), pk.revote);
+router.post(`${P}/poker/sessions/:sessionId/finalize`, ...gate("MEMBER", "poker.facilitate"), pk.finalize);
+router.post(`${P}/poker/sessions/:sessionId/skip`, ...gate("MEMBER", "poker.facilitate"), pk.skip);
+router.post(`${P}/poker/sessions/:sessionId/end`, ...gate("MEMBER", "poker.facilitate"), pk.endSession);
 
 export default router;

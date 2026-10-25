@@ -13,6 +13,8 @@ interface Opts {
   sort?: Record<string, 1 | -1>;
   populate?: any;
   ownerField?: string;
+    /** permission that lets somebody change other people's items too (e.g. discussion.moderate) */
+  moderatePerm?: string;
   beforeCreate?: (req: PReq, data: any) => Promise<void> | void;
   afterCreate?: (req: PReq, doc: any) => Promise<void> | void;
   beforeUpdate?: (req: PReq, data: any, doc: any) => Promise<void> | void;
@@ -45,8 +47,11 @@ export function makeCrud(o: Opts) {
     if (!doc) throw ApiError.notFound(`${o.entity} not found`);
     return doc;
   };
-  const notOwner = (req: Request, doc: any) =>
-    !!o.ownerField && String(doc[o.ownerField]) !== req.user!.id && (req as PReq).projectRole !== "ADMIN";
+    const notOwner = (req: Request, doc: any) =>
+    !!o.ownerField &&
+    String(doc[o.ownerField]) !== req.user!.id &&
+    (req as PReq).projectRole !== "ADMIN" &&
+    !(o.moderatePerm && req.access?.perms.has(o.moderatePerm));
 
   return {
     list: catchAsync(async (req: Request, res: Response) => {

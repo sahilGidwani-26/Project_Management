@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { validate } from "../middleware/validate";
-import { loadWorkspaceRole, requireWorkspaceRole } from "../middleware/workspaceRole";
-import { loadTaskWorkspaceRole, NOT_VIEWER, MANAGERS_ONLY } from "../middleware/taskAccess";
+import { loadWorkspaceRole, requireAnyPermission, requirePermission } from "../middleware/workspaceRole";
+import { loadTaskWorkspaceRole, noProjectViewer } from "../middleware/taskAccess";
 import { createTaskSchema, updateTaskStatusSchema } from "../validations/task.validation";
-import { getTaskGithub } from "../controllers/projectGithub.controller";
 import {
   createTask,
   listTasks,
@@ -18,38 +17,33 @@ import {
   removeDependency,
   setRecurrence,
 } from "../controllers/task.controller";
+import { getTaskGithub } from "../controllers/projectGithub.controller";
 
 const router = Router();
 router.use(requireAuth);
 
-// Create needs workspaceId in the body -> resolve role from body/params directly.
-router.post("/", validate(createTaskSchema), loadWorkspaceRole, requireWorkspaceRole(...NOT_VIEWER), createTask);
+// A Bug is checked against the Bugs permissions and any other task against the Tasks permissions.
+// The route lets either one through, the controller then checks the right one for the task's type.
+const view = requireAnyPermission("tasks.view", "bugs.view");
+const edit = requireAnyPermission("tasks.edit", "bugs.edit");
 
-// Reading tasks/lists is open to every workspace member, Viewers included.
+// Create needs workspaceId in the body -> role is resolved from the body.
+router.post("/", validate(createTaskSchema), loadWorkspaceRole, requireAnyPermission("tasks.create", "bugs.create"), createTask);
+
+// The list checks the workspace, project, private-project and "only my projects" rules itself.
 router.get("/", listTasks);
-router.get("/:taskId", getTask);
-router.get("/:taskId/github", getTaskGithub);
+router.get("/:taskId", loadTaskWorkspaceRole, view, getTask);
+router.get("/:taskId/github", loadTaskWorkspaceRole, requirePermission("github.view"), getTaskGithub);
+router.get("/:taskId/subtasks", loadTaskWorkspaceRole, view, listSubtasks);
 
-router.patch("/:taskId", loadTaskWorkspaceRole, requireWorkspaceRole(...NOT_VIEWER), updateTask);
-router.patch(
-  "/:taskId/status",
-  validate(updateTaskStatusSchema),
-  loadTaskWorkspaceRole,
-  requireWorkspaceRole(...NOT_VIEWER),
-  updateTaskStatus
-);
-router.delete("/:taskId", loadTaskWorkspaceRole, requireWorkspaceRole(...MANAGERS_ONLY), deleteTask);
+router.patch("/:taskId", loadTaskWorkspaceRole, noProjectViewer, edit, updateTask);
+router.patch("/:taskId/status", validate(updateTaskStatusSchema), loadTaskWorkspaceRole, noProjectViewer, edit, updateTaskStatus);
+router.delete("/:taskId", loadTaskWorkspaceRole, noProjectViewer, requireAnyPermission("tasks.delete", "bugs.delete"), deleteTask);
 
-router.post("/:taskId/subtasks", loadTaskWorkspaceRole, requireWorkspaceRole(...NOT_VIEWER), addSubtask);
-router.get("/:taskId/subtasks", listSubtasks);
+router.post("/:taskId/subtasks", loadTaskWorkspaceRole, noProjectViewer, requirePermission("tasks.create"), addSubtask);
 
-router.post("/:taskId/dependencies", loadTaskWorkspaceRole, requireWorkspaceRole(...MANAGERS_ONLY), addDependency);
-router.delete(
-  "/:taskId/dependencies/:dependsOnTaskId",
-  loadTaskWorkspaceRole,
-  requireWorkspaceRole(...MANAGERS_ONLY),
-  removeDependency
-);
-router.patch("/:taskId/recurrence", loadTaskWorkspaceRole, requireWorkspaceRole(...MANAGERS_ONLY), setRecurrence);
+router.post("/:taskId/dependencies", loadTaskWorkspaceRole, noProjectViewer, requirePermission("timeline.edit"), addDependency);
+router.delete("/:taskId/dependencies/:dependsOnTaskId", loadTaskWorkspaceRole, noProjectViewer, requirePermission("timeline.edit"), removeDependency);
+router.patch("/:taskId/recurrence", loadTaskWorkspaceRole, noProjectViewer, requirePermission("automation.edit"), setRecurrence);
 
 export default router;

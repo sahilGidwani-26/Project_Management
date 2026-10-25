@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { Project, IProject, ProjectRole } from "../models/Project";
-import { AccessCtx, getAccess } from "../services/permissions";
+import { AccessCtx, getAccess, isManagerLevel } from "../services/permissions";
 
 export type PReq = Request & { project: IProject; projectRole: ProjectRole };
 
@@ -9,31 +9,32 @@ export const WORKSPACE_MANAGERS = ["OWNER", "ADMIN", "PROJECT_MANAGER"];
 
 export const fail = (res: Response, message: string, code = 400) => res.status(code).json({ success: false, message });
 
+export const isInProject = (project: IProject, userId: string) =>
+  String(project.managerId) === userId ||
+  String(project.createdBy) === userId ||
+  project.memberRoles.some((m) => String(m.userId) === userId) ||
+  project.members.some((m) => String(m) === userId);
+
 /**
- * Effective role of a user inside one project:
- *  - role limited to "projects I am in" and not in this project => no access
- *  - workspace OWNER / ADMIN / PROJECT_MANAGER (built-in base role), project manager and creator => ADMIN
- *  - explicit per-project role => that role
- *  - listed member => MEMBER (VIEWER if workspace role is VIEWER)
- *  - public project => any workspace member gets MEMBER (VIEWER for workspace viewers)
- *  - private project and not a member => no access (null)
+ * Can this person open this project, and as what?
+ *  - a role limited to "projects I am in" never sees other projects
+ *  - Owner / Admin / Project Manager level people, the project's manager and its creator => ADMIN
+ *  - an explicit per-project role (Members tab) => that role (a project "Viewer" stays read-only)
+ *  - listed members and, for public projects, everybody else in the workspace => MEMBER
+ *  - private project and not in it => no access (null)
+ * What the person may DO is decided by their role's permissions (requirePermission), not by this.
  */
 export async function resolveProjectRole(project: IProject, userId: string, access?: AccessCtx | null): Promise<ProjectRole | null> {
   const a = access ?? (await getAccess(project.workspaceId, userId));
   if (!a) return null;
 
-  const isInProject =
-    String(project.managerId) === userId ||
-    String(project.createdBy) === userId ||
-    project.memberRoles.some((m) => String(m.userId) === userId) ||
-    project.members.some((m) => String(m) === userId);
-  if (a.scope === "member" && !a.isOwner && !isInProject) return null;
+  const inProject = isInProject(project, userId);
+  if (a.scope === "member" && !a.isOwner && !inProject) return null;
 
-  if (WORKSPACE_MANAGERS.includes(a.legacyRole)) return "ADMIN";
-  if (String(project.managerId) === userId || String(project.createdBy) === userId) return "ADMIN";
+  if (isManagerLevel(a) || String(project.managerId) === userId || String(project.createdBy) === userId) return "ADMIN";
   const explicit = project.memberRoles.find((m) => String(m.userId) === userId);
   if (explicit) return explicit.role;
-  if (isInProject || project.visibility === "public") return a.legacyRole === "VIEWER" ? "VIEWER" : "MEMBER";
+  if (inProject || project.visibility === "public") return "MEMBER";
   return null;
 }
 
@@ -46,7 +47,7 @@ export const projectAccess = (min: ProjectRole = "VIEWER") => async (req: Reques
     const access = await getAccess(project.workspaceId, req.user!.id);
     const role = await resolveProjectRole(project, req.user!.id, access);
     if (!role) return fail(res, "You don't have access to this project", 403);
-    if (RANK[role] < RANK[min]) return fail(res, "You don't have permission to do this in this project", 403);
+    if (RANK[role] < RANK[min]) return fail(res, "You have view-only access in this project", 403);
     (req as PReq).project = project;
     (req as PReq).projectRole = role;
     req.access = access!;
