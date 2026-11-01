@@ -192,3 +192,15 @@ export async function attachRoleInfo(workspaceId: string, members: any[]) {
 
 /** Owner, Admin and Project Manager level people (and custom roles that are as strong as those) see every project, private ones too. */
 export const isManagerLevel = (a: AccessCtx) => a.isOwner || ["OWNER", "ADMIN", "PROJECT_MANAGER"].includes(a.legacyRole);
+
+
+/** Can this person give this role away? Owner can give any. Nobody can give a role with permissions they lack, or a wider project reach than their own. */
+export function canGiveRoleDoc(actor: AccessCtx, role: any) {
+  if (actor.isOwner) return true;
+  if (role.systemKey === "OWNER") return false;
+  if (actor.scope === "member" && role.scope === "all") return false;
+  return normalize(role.permissions || []).every((p) => actor.perms.has(p));
+}
+
+/** Anybody who may add, edit, deactivate or bulk-manage people. They also see deactivated people, last login and employee IDs. */
+export const isPeopleAdmin = (a: AccessCtx) => ["people.invite", "people.edit", "people.deactivate", "people.bulk"].some((p) => a.perms.has(p));

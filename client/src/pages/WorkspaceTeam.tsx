@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, UserPlus, X } from "lucide-react";
+import { Search, UserPlus, Users, X } from "lucide-react";
 import { api } from "@/lib/api";
-import { InvitationItem, WorkspaceMember, WorkspaceRole } from "@/types";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { InvitationItem, WorkspaceMember } from "@/types";
+import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { AddMemberDialog } from "@/components/people/AddMemberDialog";
+import { BulkImportDialog } from "@/components/people/BulkImportDialog";
 import { MemberAvatar, RoleBadge, StatusPills } from "@/components/people/peopleUi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,14 +16,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EMPLOYMENT, ROLES, copyText, employmentLabel, isAdminRole, roleLabel } from "@/lib/people";
-import { cn, formatDate } from "@/lib/utils";
-import { Users } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { BulkImportDialog } from "@/components/people/BulkImportDialog";
+import { EMPLOYMENT, copyText, employmentLabel, roleLabel } from "@/lib/people";
 import { attempt, downloadFromApi, timeAgo } from "@/lib/projectMeta";
-import { usePermissions } from "@/hooks/usePermissions";
-import { useRoles } from "@/hooks/useRoles";
+import { cn, formatDate } from "@/lib/utils";
 
 type View = "grid" | "table";
 
@@ -33,12 +30,10 @@ export default function WorkspaceTeam() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { currentWorkspace } = useWorkspace();
-  const myRole = currentWorkspace?.myRole as WorkspaceRole | undefined;
-  const admin = isAdminRole(myRole);
-  const { can } = usePermissions();
-  const { roles } = useRoles(workspaceId);
-  const roleOptions: [string, string][] = roles ? roles.map((r) => [r._id, r.name]) : ROLES.map((r) => [r, roleLabel(r)]);
+  const { can, canAny } = usePermissions();
+
+  // people managers also see deactivated people, last login and the stat cards
+  const admin = canAny("people.invite", "people.edit", "people.deactivate", "people.bulk");
 
   const [view, setView] = useState<View>(() => (localStorage.getItem("fb_team_view") as View) || "grid");
   const [search, setSearch] = useState("");
@@ -51,17 +46,16 @@ export default function WorkspaceTeam() {
 
   useEffect(() => localStorage.setItem("fb_team_view", view), [view]);
 
-  // admins also see deactivated people (key differs from the plain ["members", id] list used by pickers elsewhere)
   const { data: members, isLoading } = useQuery({
     queryKey: ["team-members", workspaceId, admin],
     queryFn: async () => (await api.get(`/workspaces/${workspaceId}/members${admin ? "?status=all" : ""}`)).data.data as WorkspaceMember[],
-    enabled: !!workspaceId && !!myRole,
+    enabled: !!workspaceId,
   });
 
   const { data: invitations } = useQuery({
     queryKey: ["invitations", workspaceId],
     queryFn: async () => (await api.get(`/workspaces/${workspaceId}/invitations`)).data.data as InvitationItem[],
-    enabled: !!workspaceId && admin,
+    enabled: !!workspaceId && can("people.invite"),
   });
 
   const refresh = () => {
@@ -73,12 +67,18 @@ export default function WorkspaceTeam() {
 
   const all = members || [];
   const departments = useMemo(() => [...new Set(all.map((m) => m.profile?.department).filter(Boolean) as string[])].sort(), [all]);
+  // the role filter lists the roles that really exist among these people (custom roles included)
+  const roleOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    all.forEach((m) => map.set(m.roleRefId || m.role, m.roleName || roleLabel(m.role)));
+    return [...map.entries()];
+  }, [all]);
 
   const q = search.trim().toLowerCase();
   const list = all.filter((m) => {
     if (status === "active" && m.status !== "active") return false;
     if (status === "deactivated" && m.status !== "deactivated") return false;
-    if (role !== "all" && m.roleRefId !== role && m.role !== role) return false;
+    if (role !== "all" && (m.roleRefId || m.role) !== role) return false;
     if (dept !== "all" && m.profile?.department !== dept) return false;
     if (emp !== "all" && m.profile?.employmentType !== emp) return false;
     if (q && ![m.userId.name, m.userId.email, m.profile?.designation, m.profile?.company, m.profile?.department].some((v) => v?.toLowerCase().includes(q))) return false;
@@ -100,22 +100,20 @@ export default function WorkspaceTeam() {
             {can("roles.view") && <Button size="sm" variant="outline" asChild><Link to={`/app/${workspaceId}/roles`}>Roles</Link></Button>}
             <Button size="sm" variant="outline" asChild><Link to={`/app/${workspaceId}/team/departments`}>Departments</Link></Button>
             <Button size="sm" variant="outline" asChild><Link to={`/app/${workspaceId}/team/org-chart`}>Org chart</Link></Button>
-            {admin && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const priv = window.confirm("Include private details (phone, address, date of birth) in the file?\n\nOK = include them. Cancel = work details only.");
-                    attempt(() => downloadFromApi(`/workspaces/${workspaceId}/members/export${priv ? "?private=1" : ""}`, "team.csv"));
-                  }}
-                >
-                  Export CSV
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>Import CSV</Button>
-                <Button size="sm" onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add member</Button>
-              </>
+            {can("people.bulk") && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const priv = can("people.private") && window.confirm("Include private details (phone, address, date of birth) in the file?\n\nOK = include them. Cancel = work details only.");
+                  attempt(() => downloadFromApi(`/workspaces/${workspaceId}/members/export${priv ? "?private=1" : ""}`, "team.csv"));
+                }}
+              >
+                Export CSV
+              </Button>
             )}
+            {can("people.bulk") && can("people.invite") && <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>Import CSV</Button>}
+            {can("people.invite") && <Button size="sm" onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add member</Button>}
           </div>
         }
       />
@@ -124,7 +122,7 @@ export default function WorkspaceTeam() {
         {admin && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Active members" value={active.length} />
-            <Stat label="Owners & admins" value={active.filter((m) => isAdminRole(m.role)).length} />
+            <Stat label="Owners & admins" value={active.filter((m) => m.role === "OWNER" || m.role === "ADMIN").length} />
             <Stat label="Pending invitations" value={invitations?.length || 0} cls={invitations?.length ? "text-amber-600" : ""} />
             <Stat label="Deactivated" value={all.filter((m) => m.status === "deactivated").length} />
           </div>
@@ -137,7 +135,7 @@ export default function WorkspaceTeam() {
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, designation…" className="pl-8" />
           </div>
           <Select value={role} onValueChange={setRole}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Role" /></SelectTrigger>
+            <SelectTrigger className="w-44"><SelectValue placeholder="Role" /></SelectTrigger>
             <SelectContent><SelectItem value="all">All roles</SelectItem>{roleOptions.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
           </Select>
           {!!departments.length && (
@@ -220,7 +218,7 @@ export default function WorkspaceTeam() {
                         <StatusPills m={m} />
                       </div>
                     </td>
-                    <RoleBadge role={m.role} name={m.roleName} color={m.roleColor} />
+                    <td className="px-4 py-2.5"><RoleBadge role={m.role} name={m.roleName} color={m.roleColor} /></td>
                     <td className="px-4 py-2.5 text-xs">{m.profile?.designation || m.userId.jobTitle || "—"}</td>
                     <td className="px-4 py-2.5 text-xs">{m.profile?.department || "—"}</td>
                     <td className="px-4 py-2.5 text-xs">{m.profile?.company || "—"}</td>
@@ -235,7 +233,7 @@ export default function WorkspaceTeam() {
         )}
 
         {/* pending invitations */}
-        {admin && !!invitations?.length && (
+        {can("people.invite") && !!invitations?.length && (
           <section className="space-y-2">
             <h3 className="font-medium">Pending invitations</h3>
             <Card><CardContent className="divide-y divide-border p-0">
@@ -258,22 +256,14 @@ export default function WorkspaceTeam() {
           </section>
         )}
 
-
         {can("roles.view") && (
           <p className="text-sm text-muted-foreground">
-            To see or change what each role can do, open{" "}
-            <Link
-              to={`/app/${workspaceId}/roles`}
-              className="text-primary hover:underline"
-            >
-              Roles &amp; permissions
-            </Link>.
+            To see or change what each role can do, open <Link to={`/app/${workspaceId}/roles`} className="text-primary hover:underline">Roles &amp; permissions</Link>.
           </p>
         )}
-
       </div>
 
-      <AddMemberDialog open={addOpen} onOpenChange={setAddOpen} workspaceId={workspaceId!} myRole={myRole} onDone={refresh} />
+      <AddMemberDialog open={addOpen} onOpenChange={setAddOpen} workspaceId={workspaceId!} onDone={refresh} />
       <BulkImportDialog open={importOpen} onOpenChange={setImportOpen} workspaceId={workspaceId!} onDone={refresh} />
     </div>
   );

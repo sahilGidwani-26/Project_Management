@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field } from "@/components/common/FormDialog";
 import { CopyField } from "./peopleUi";
-import { EMPLOYMENT, ROLE_INFO, assignableRoles, genPassword, passwordIssue, roleLabel } from "@/lib/people";
+import { useAssignableRoles } from "@/hooks/useRoles";
+import { EMPLOYMENT, ROLE_INFO, genPassword, passwordIssue } from "@/lib/people";
 import { cn } from "@/lib/utils";
 
 type Result =
@@ -17,23 +18,30 @@ type Result =
   | { kind: "existing"; email: string }
   | { kind: "invited"; email: string; link: string };
 
+interface Opt { id: string; name: string; systemKey: WorkspaceRole | null; description: string; color?: string }
+
 export function AddMemberDialog({
-  open, onOpenChange, workspaceId, myRole, onDone,
+  open, onOpenChange, workspaceId, onDone,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   workspaceId: string;
-  myRole?: WorkspaceRole;
   onDone: () => void;
 }) {
-  const roles = assignableRoles(myRole);
+  // only the roles THIS person is allowed to give (the server checks the same rule)
+  const { roles } = useAssignableRoles(workspaceId);
+  const options: Opt[] = useMemo(
+    () => (roles || []).map((r) => ({ id: r._id, name: r.name, systemKey: r.systemKey, description: r.description || (r.systemKey ? ROLE_INFO[r.systemKey] : "Custom role"), color: r.color })),
+    [roles]
+  );
+
   const [mode, setMode] = useState<"create" | "invite">("create");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<WorkspaceRole>("MEMBER");
+  const [roleId, setRoleId] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [send, setSend] = useState(true);
@@ -44,22 +52,32 @@ export function AddMemberDialog({
   const [employmentType, setEmploymentType] = useState("none");
   const [phone, setPhone] = useState("");
 
+  // invitations can only carry the built-in roles
+  const shown = mode === "invite" ? options.filter((o) => o.systemKey) : options;
+  const selected = shown.find((o) => o.id === roleId);
+  const hasCustom = options.some((o) => !o.systemKey);
+
   useEffect(() => {
     if (!open) return;
     setMode("create"); setResult(null); setBusy(false);
-    setEmail(""); setName(""); setRole("MEMBER"); setPassword(""); setShowPw(false); setSend(true); setMore(false);
+    setEmail(""); setName(""); setPassword(""); setShowPw(false); setSend(true); setMore(false);
     setDesignation(""); setDepartment(""); setCompany(""); setEmploymentType("none"); setPhone("");
   }, [open]);
 
+  useEffect(() => {
+    if (!shown.some((o) => o.id === roleId)) setRoleId((shown.find((o) => o.systemKey === "MEMBER") || shown[0])?.id || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, options.length]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || !selected) return;
     const clean = email.trim();
 
     if (mode === "invite") {
       setBusy(true);
       try {
-        const res = await api.post(`/workspaces/${workspaceId}/invitations`, { email: clean, role });
+        const res = await api.post(`/workspaces/${workspaceId}/invitations`, { email: clean, role: selected.systemKey });
         setResult({ kind: "invited", email: clean.toLowerCase(), link: res.data.data.inviteUrl });
         onDone();
       } catch (err) {
@@ -81,7 +99,7 @@ export function AddMemberDialog({
     setBusy(true);
     try {
       const res = await api.post(`/workspaces/${workspaceId}/members`, {
-        email: clean, role, sendLoginDetails: send, profile,
+        email: clean, roleId: selected.id, sendLoginDetails: send, profile,
         ...(name.trim() ? { name: name.trim() } : {}),
         ...(phone.trim() ? { personal: { phone: phone.trim() } } : {}),
         ...(password ? { password } : {}),
@@ -159,11 +177,19 @@ export function AddMemberDialog({
               )}
 
               <Field label="Role" className="sm:col-span-2">
-                <Select value={role} onValueChange={(v) => setRole(v as WorkspaceRole)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{roles.map((r) => <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>)}</SelectContent>
+                <Select value={roleId} onValueChange={setRoleId}>
+                  <SelectTrigger><SelectValue placeholder={roles ? "Choose a role" : "Loading roles…"} /></SelectTrigger>
+                  <SelectContent>
+                    {shown.map((o) => (
+                      <SelectItem key={o.id} value={o.id}>
+                        <span className="flex items-center gap-2">{o.color && <span className="h-2 w-2 rounded-full" style={{ background: o.color }} />}{o.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{ROLE_INFO[role]}</p>
+                <p className="text-xs text-muted-foreground">{selected?.description}</p>
+                {roles && !shown.length && <p className="text-xs text-amber-600">There is no role you are allowed to give. Ask an admin.</p>}
+                {mode === "invite" && hasCustom && <p className="text-xs text-amber-600">Invitations can use the built-in roles only. After they join, open their profile to give them a custom role.</p>}
               </Field>
 
               {mode === "create" && (
@@ -207,7 +233,7 @@ export function AddMemberDialog({
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={busy || !email.trim() || (mode === "create" && !name.trim() && false)}>
+              <Button type="submit" disabled={busy || !email.trim() || !selected}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                 {mode === "create" ? "Create account" : "Send invitation"}
               </Button>

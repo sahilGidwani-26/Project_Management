@@ -4,11 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
 import { MemberDetail as Detail, MemberProgress, WorkspaceMember } from "@/types";
-import { useAuth } from "@/hooks/useAuth";
-// import { useWorkspace } from "@/hooks/useWorkspace";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useWorkspaceMembers } from "@/hooks/useProject";
 import { EditProfileDialog } from "@/components/people/EditProfileDialog";
 import { CredentialsDialog, MemberAvatar, RoleBadge } from "@/components/people/peopleUi";
+import { RoleSelect } from "@/components/people/RoleSelect";
 import { WeeklyBars } from "@/components/forecast/forecastUi";
 import { FormDialog } from "@/components/common/FormDialog";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -18,10 +18,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { employmentLabel } from "@/lib/people";
 import { attempt, fmtMinutes, taskStatusColor, timeAgo } from "@/lib/projectMeta";
 import { cn, formatDate } from "@/lib/utils";
-import { employmentLabel } from "@/lib/people";
-import { RoleSelect } from "@/components/people/RoleSelect";
 
 const Row = ({ label, value }: { label: string; value?: React.ReactNode }) => (
   <div className="flex justify-between gap-4 border-b border-border py-2 text-sm last:border-0">
@@ -144,7 +143,7 @@ function ProgressTab({ workspaceId, memberId }: { workspaceId: string; memberId:
 
       <Card><CardContent className="space-y-3 p-5">
         <h3 className="font-medium">Projects</h3>
-        {!data.projects.length && <p className="text-sm text-muted-foreground">Not part of any project yet.</p>}
+        {!data.projects.length && <p className="text-sm text-muted-foreground">Not part of any project you can see.</p>}
         <div className="divide-y divide-border">
           {data.projects.map((p) => (
             <Link key={p._id} to={`/app/${workspaceId}/projects/${p._id}/overview`} className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-sm hover:bg-secondary/30">
@@ -195,14 +194,11 @@ export default function MemberDetail() {
   const { workspaceId, memberId: param } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { user } = useAuth();
-  // const { currentWorkspace } = useWorkspace();
-  // const myRole = currentWorkspace?.myRole as WorkspaceRole | undefined;
+  const perm = usePermissions();
   const { data: members } = useWorkspaceMembers(workspaceId);
 
-  // "/team/me" is a shortcut to your own profile
-  const mine = param === "me" ? members?.find((m) => m.userId.email?.toLowerCase() === user?.email?.toLowerCase()) : undefined;
-  const memberId = param === "me" ? mine?._id : param;
+  // "/team/me" is a shortcut to your own profile (the server tells us which member you are)
+  const memberId = param === "me" ? perm.memberId : param;
 
   const { data: d, isLoading, isError } = useQuery({
     queryKey: ["member", workspaceId, memberId],
@@ -221,11 +217,14 @@ export default function MemberDetail() {
     qc.invalidateQueries({ queryKey: ["member-progress", workspaceId] });
     qc.invalidateQueries({ queryKey: ["members", workspaceId] });
     qc.invalidateQueries({ queryKey: ["team-members", workspaceId] });
+    qc.invalidateQueries({ queryKey: ["roles", workspaceId] });
   };
   const back = () => navigate(`/app/${workspaceId}/team`);
   const base = `/workspaces/${workspaceId}/members/${memberId}`;
 
-  if (param === "me" && members && !mine) return <div><PageHeader title="Profile" /><p className="p-6 text-sm text-muted-foreground">Could not find your profile in this workspace.</p></div>;
+  if (param === "me" && perm.ready && !memberId) {
+    return <div><PageHeader title="Profile" /><p className="p-6 text-sm text-muted-foreground">Could not find your profile in this workspace.</p></div>;
+  }
   if (isLoading || !memberId || !d) {
     return (
       <div>
@@ -244,7 +243,7 @@ export default function MemberDetail() {
   const candidates = (members || []).filter((x) => x._id !== m._id && x.role !== "VIEWER");
   const title = prof?.designation || m.userId.jobTitle;
 
-   const changeRole = async (roleId: string) => {
+  const changeRole = async (roleId: string) => {
     if (await attempt(() => api.put(`${base}/role`, { roleId }), "Role updated")) refresh();
   };
 
@@ -298,7 +297,7 @@ export default function MemberDetail() {
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold">{m.userId.name}</h2>
-                  <RoleBadge role={m.role} />
+                  <RoleBadge role={m.role} name={m.roleName} color={m.roleColor} />
                   {m.status === "deactivated" && <Badge variant="outline" className="border-red-500 text-red-600">Deactivated</Badge>}
                   {p.isSelf && <Badge variant="secondary">You</Badge>}
                 </div>
@@ -307,21 +306,7 @@ export default function MemberDetail() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-             
-{p.canChangeRole && (
-  <RoleSelect
-    workspaceId={workspaceId!}
-    value={m.roleRefId || ""}
-    onChange={changeRole}
-  />
-)}
-
-<RoleBadge
-  role={m.role}
-  name={m.roleName}
-  color={m.roleColor}
-/>
-
+              {p.canChangeRole && <RoleSelect workspaceId={workspaceId!} value={m.roleRefId || ""} currentName={m.roleName} onChange={changeRole} />}
               {p.canEdit && <Button size="sm" onClick={() => setEditOpen(true)}>Edit profile</Button>}
               {p.canReactivate && <Button size="sm" variant="outline" onClick={async () => (await attempt(() => api.post(`${base}/reactivate`), "Member reactivated")) && refresh()}>Reactivate</Button>}
               {p.canDeactivate && <Button size="sm" variant="outline" onClick={() => setDeactivateOpen(true)}>Deactivate</Button>}
@@ -368,7 +353,7 @@ export default function MemberDetail() {
               {pers && (
                 <Card><CardContent className="p-5">
                   <h3 className="font-medium">Personal details</h3>
-                  <p className="mb-2 text-xs text-muted-foreground">🔒 Only workspace admins and {p.isSelf ? "you" : m.userId.name.split(" ")[0]} can see this.</p>
+                  <p className="mb-2 text-xs text-muted-foreground">🔒 Only {p.isSelf ? "you" : m.userId.name.split(" ")[0]} and people with the “private details” permission can see this.</p>
                   <Row label="Phone" value={pers.phone} />
                   <Row label="Alternate phone" value={pers.alternatePhone} />
                   <Row label="Date of birth" value={pers.dateOfBirth ? formatDate(pers.dateOfBirth) : undefined} />

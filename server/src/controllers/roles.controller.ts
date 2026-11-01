@@ -14,7 +14,7 @@ import { memberRoleChangedEmail } from "../utils/peopleEmailTemplates";
 import { assertNotLastOwner } from "../services/people";
 import {
   ALL_PERMS, AccessCtx, CATALOG, DEFAULT_PERMS, PERM_LABELS, PERM_SET, SYSTEM_ORDER,
-  compatRole, ensureSystemRoles, getAccess, normalize,
+  canGiveRoleDoc, compatRole, ensureSystemRoles, getAccess, normalize,
 } from "../services/permissions";
 
 const ID = /^[a-f\d]{24}$/i;
@@ -89,6 +89,7 @@ export const myPermissions = catchAsync(async (req: Request, res: Response) => {
   return sendSuccess(
     res, 200,
     {
+      memberId: a.memberId,
       role: { id: a.roleId, key: a.roleKey, name: a.roleName, color: a.roleColor, isOwner: a.isOwner },
       scope: a.scope,
       legacyRole: a.legacyRole,
@@ -310,4 +311,23 @@ export const assignRole = catchAsync(async (req: Request, res: Response) => {
   }).catch(() => undefined);
 
   return sendSuccess(res, 200, { memberId: member._id, roleId: target._id, roleName: target.name }, "Role updated");
+});
+
+
+/** GET /workspaces/:id/roles/assignable: the roles THIS person may give to somebody (used by "Add member" and the role dropdown). */
+export const assignableRoles = catchAsync(async (req: Request, res: Response) => {
+  const { workspaceId } = req.params;
+  const actor = req.access!;
+  await ensureSystemRoles(workspaceId);
+
+  const roles: any[] = await AccessRole.find({ workspaceId }).lean();
+  const list = roles
+    .filter((r) => canGiveRoleDoc(actor, r))
+    .sort((a, b) => {
+      const ia = a.systemKey ? SYSTEM_ORDER.indexOf(a.systemKey) : 99;
+      const ib = b.systemKey ? SYSTEM_ORDER.indexOf(b.systemKey) : 99;
+      return ia - ib || a.nameLower.localeCompare(b.nameLower);
+    })
+    .map((r) => ({ _id: r._id, name: r.name, color: r.color, description: r.description || "", systemKey: r.systemKey || null, scope: r.scope, permissionCount: normalize(r.permissions || []).length }));
+  return sendSuccess(res, 200, list, "Assignable roles");
 });

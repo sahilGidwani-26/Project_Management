@@ -8,6 +8,7 @@ export const createMemberSchema = z.object({
     email: z.string().trim().toLowerCase().email().max(200),
     name: z.string().trim().min(2).max(100).optional(),
     role: role.default("MEMBER"),
+    roleId: z.string().optional(),
     password: z.string().max(72).optional(),
     sendLoginDetails: z.boolean().optional(),
     profile: loose,

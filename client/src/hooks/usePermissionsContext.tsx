@@ -9,6 +9,7 @@ export interface PermissionCtx {
   ready: boolean;
   /** true when the permissions could not be loaded. The UI then stays open and the server still enforces everything */
   degraded: boolean;
+  memberId?: string;
   perms: Set<string>;
   isOwner: boolean;
   scope: "all" | "member";
@@ -53,6 +54,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     const can = (p: string) => degraded || perms.has(p);
     return {
       ready: !isLoading,
+      memberId: data?.memberId,
       degraded,
       perms,
       isOwner: !!data?.role.isOwner,
