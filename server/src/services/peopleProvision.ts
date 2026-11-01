@@ -8,7 +8,8 @@ import { ActivityLog } from "../models/ActivityLog";
 import { sendMail } from "../utils/mailer";
 import { env } from "../config/env";
 import { accountCreatedEmail, addedToWorkspaceEmail, workspaceInviteEmail } from "../utils/peopleEmailTemplates";
-import { EMPLOYMENT, ROLES, buildPatch, canAssign, generatePassword } from "./people";
+// import { EMPLOYMENT, ROLES, buildPatch, canAssign, generatePassword } from "./people";
+import { EMPLOYMENT, ROLES, buildPatch, generatePassword } from "./people";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ROLE_ALIASES: Record<string, WorkspaceRole> = { pm: "PROJECT_MANAGER", "project mgr": "PROJECT_MANAGER", "project manager": "PROJECT_MANAGER" };
@@ -38,7 +39,7 @@ export interface NormRow {
 }
 
 export interface CheckCtx {
-  actorRole: WorkspaceRole;
+  allowedRoles: Set<string>;
   mode: "create" | "invite";
   seen: Set<string>;
   users: Map<string, any>;
@@ -68,7 +69,7 @@ export function checkRow(raw: Record<string, unknown>, ctx: CheckCtx): CheckResu
 
   const role = normRole(str(raw.role));
   if (!role) return bad(`Unknown role "${str(raw.role)}". Use Owner, Admin, Project Manager, Member or Viewer`);
-  if (!canAssign(ctx.actorRole, role)) return bad(`You are not allowed to give the ${role.toLowerCase().replace(/_/g, " ")} role`);
+    if (!ctx.allowedRoles.has(role)) return bad(`You are not allowed to give the ${role.toLowerCase().replace(/_/g, " ")} role`);
 
   const employmentType = normEmployment(str(raw.employmentType ?? raw.employment_type));
   if (employmentType === null) return bad("Unknown employment type. Use full-time, part-time, contractor, intern, client or vendor");
@@ -154,6 +155,7 @@ export async function provisionRow(n: NormRow, c: ProvisionCtx): Promise<Provisi
   if (member) {
     member.status = "active";
     member.role = n.role;
+        member.roleId = undefined; // a built-in role again, drop any custom role they had before
     member.deactivatedAt = undefined;
     member.deactivatedBy = undefined;
   } else {

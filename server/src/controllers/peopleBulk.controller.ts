@@ -5,7 +5,7 @@ import { ApiError } from "../utils/ApiError";
 import { sendSuccess } from "../utils/ApiResponse";
 import { User } from "../models/User";
 import { Workspace } from "../models/Workspace";
-import { WorkspaceMember, WorkspaceRole } from "../models/WorkspaceMember";
+import { WorkspaceMember } from "../models/WorkspaceMember";
 import { Project } from "../models/Project";
 import { Task } from "../models/Task";
 import { ActivityLog } from "../models/ActivityLog";
@@ -13,12 +13,12 @@ import { sendMail } from "../utils/mailer";
 import { bulkImportSummaryEmail } from "../utils/peopleEmailTemplates";
 import { buildProjectUrl, projectMemberAddedEmail } from "../utils/projectEmailTemplates";
 import { getName, logActivity, sendToUsers } from "../services/projectEvents";
-import { isManagerRole } from "../services/people";
+import { ROLES, resolveGrantableRole } from "../services/people";
 import { checkRow, provisionRow } from "../services/peopleProvision";
+import { resolveProjectRole } from "../utils/projectAccess";
 import { env } from "../config/env";
 
 const ID = /^[a-f\d]{24}$/i;
-const roleOf = (req: Request) => req.workspaceRole as WorkspaceRole;
 const nameOf = async (id: string) => ((await User.findById(id).select("name")) as any)?.name || "Someone";
 
 /* ================================ bulk import ================================ */
@@ -36,12 +36,23 @@ export const bulkImport = catchAsync(async (req: Request, res: Response) => {
   if (!Array.isArray(rows) || !rows.length) throw ApiError.badRequest("There are no rows to import");
   if (rows.length > 100) throw ApiError.badRequest("Import at most 100 people at a time");
 
+  // which built-in roles may THIS person give? (never more than they have themself)
+  const allowedRoles = new Set<string>();
+  for (const key of ROLES) {
+    try {
+      await resolveGrantableRole(req.access!, workspaceId, { role: key });
+      allowedRoles.add(key);
+    } catch {
+      /* not allowed */
+    }
+  }
+
   const emails = [...new Set(rows.map((r) => String((r as any)?.email || "").trim().toLowerCase()).filter(Boolean))];
   const users: any[] = emails.length ? await User.find({ email: { $in: emails } }).select("_id name email accountStatus").lean() : [];
   const members: any[] = users.length ? await WorkspaceMember.find({ workspaceId, userId: { $in: users.map((u) => u._id) } }).select("userId status").lean() : [];
 
   const ctx = {
-    actorRole: roleOf(req), mode, seen: new Set<string>(),
+    allowedRoles, mode, seen: new Set<string>(),
     users: new Map(users.map((u) => [u.email, u])),
     memberStatus: new Map(members.map((m) => [String(m.userId), m.status as string])),
   };
@@ -100,10 +111,13 @@ const csvCell = (v: unknown) => {
 };
 const day = (d: unknown) => (d ? new Date(d as string).toISOString().slice(0, 10) : "");
 
-/** GET /workspaces/:id/members/export?private=1 : admins only. Private details (phone, address, DOB) only when asked, and the export is logged. */
+/** GET /workspaces/:id/members/export?private=1 : needs people.bulk. Private details (phone, address, DOB) also need people.private, and the export is logged. */
 export const exportMembers = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId } = req.params;
   const withPrivate = req.query.private === "1";
+  if (withPrivate && !req.access!.perms.has("people.private")) {
+    throw ApiError.forbidden("You do not have permission to export private details (phone, address, date of birth)");
+  }
 
   const members: any[] = await WorkspaceMember.find({ workspaceId, status: { $in: ["active", "deactivated"] } })
     .sort({ joinedAt: 1 })
@@ -147,10 +161,10 @@ export const exportMembers = catchAsync(async (req: Request, res: Response) => {
 
 /* ================================ departments ================================ */
 
-/** GET /workspaces/:id/departments : people grouped by department. Workload numbers only for managers. */
+/** GET /workspaces/:id/departments : people grouped by department. Workload numbers only for people.progress holders. */
 export const listDepartments = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId } = req.params;
-  const manager = isManagerRole(roleOf(req));
+  const manager = req.access!.perms.has("people.progress");
 
   const members: any[] = await WorkspaceMember.find({ workspaceId, status: "active" })
     .select("userId role profile.designation profile.department")
@@ -211,7 +225,7 @@ export const orgChart = catchAsync(async (req: Request, res: Response) => {
 
 /* ============================ add people to a project ============================ */
 
-/** POST /workspaces/:id/members/add-to-project  body: { projectId, userIds: [], role } (used for "add the whole department"). */
+/** POST /workspaces/:id/members/add-to-project  body: { projectId, userIds: [], role } (used for "add the whole department"). Needs projects.members. */
 export const addToProject = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId } = req.params;
   const actorId = req.user!.id;
@@ -224,6 +238,7 @@ export const addToProject = catchAsync(async (req: Request, res: Response) => {
 
   const project: any = await Project.findOne({ _id: projectId, workspaceId });
   if (!project) throw ApiError.notFound("Project not found");
+  if (!(await resolveProjectRole(project, actorId, req.access))) throw ApiError.forbidden("You do not have access to that project");
 
   const valid = (await WorkspaceMember.find({ workspaceId, userId: { $in: ids }, status: "active" }).distinct("userId")).map(String);
   const have = new Set((project.members || []).map(String));

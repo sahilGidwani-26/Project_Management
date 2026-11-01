@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
-import { DepartmentGroup, Project, WorkspaceRole } from "@/types";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { DepartmentGroup, Project } from "@/types";
+import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { FormDialog, Field } from "@/components/common/FormDialog";
@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { isManagerRole } from "@/lib/people";
 import { cn } from "@/lib/utils";
 
 const PROJECT_ROLES = [["MEMBER", "Member"], ["VIEWER", "Viewer"], ["ADMIN", "Project admin"]] as const;
@@ -86,9 +85,9 @@ function AddToProjectDialog({ group, workspaceId, onClose }: { group: Department
 export default function TeamDepartments() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
-  const { currentWorkspace } = useWorkspace();
-  const myRole = currentWorkspace?.myRole as WorkspaceRole | undefined;
-  const manager = isManagerRole(myRole);
+  const { can } = usePermissions();
+  const manager = can("people.progress"); // shows the open-task numbers
+  const canAddToProject = can("projects.members");
   const [adding, setAdding] = useState<DepartmentGroup | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -124,7 +123,7 @@ export default function TeamDepartments() {
                     {manager && g.overdue ? <span className="text-destructive"> · {g.overdue} overdue</span> : null}
                   </p>
                 </div>
-                {manager && <Button size="sm" variant="outline" onClick={() => setAdding(g)}>Add to project</Button>}
+                {canAddToProject && <Button size="sm" variant="outline" onClick={() => setAdding(g)}>Add to project</Button>}
               </div>
               <div className="divide-y divide-border">
                 {g.members.map((m) => (

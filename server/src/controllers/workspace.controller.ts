@@ -18,20 +18,19 @@ import { TimeEntry } from "../models/ProjectExtras";
 import { GithubTaskLink } from "../models/GithubIntegration";
 import { sendMail } from "../utils/mailer";
 import { env } from "../config/env";
-import { attachRoleInfo } from "../services/permissions";
 import {
   accountCreatedEmail, addedToWorkspaceEmail, inviteAcceptedEmail, memberDeactivatedEmail, memberReactivatedEmail,
-  memberRemovedEmail, memberRoleChangedEmail, workspaceInviteEmail,
+  memberRemovedEmail, workspaceInviteEmail,
 } from "../utils/peopleEmailTemplates";
 import {
-  EMPLOYMENT, ROLES, assertNoCycle, assertNotLastOwner, buildPatch, canAssign, canManageTarget, generatePassword, isAdminRole, isManagerRole, passwordProblem,
+  EMPLOYMENT, ROLES, assertNoCycle, assertNotLastOwner, buildPatch, canManageMember, generatePassword, passwordProblem, resolveGrantableRole,
 } from "../services/people";
 import { cycleStats } from "../services/sprintMetrics";
+import { attachRoleInfo, isManagerLevel, isPeopleAdmin } from "../services/permissions";
 
 const ID = /^[a-f\d]{24}$/i;
 const DAY = 864e5;
 const escRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const roleOf = (req: Request) => req.workspaceRole as WorkspaceRole;
 const send = (to: string | undefined, mail: { subject: string; html: string }) => {
   if (to) sendMail(to, mail.subject, mail.html).catch(() => {});
 };
@@ -108,8 +107,16 @@ export const getWorkspace = catchAsync(async (req: Request, res: Response) => {
   return sendSuccess(res, 200, workspace, "Workspace");
 });
 
+/** Only these fields can be changed from outside (ownerId, slug and status are not editable here). */
 export const updateWorkspace = catchAsync(async (req: Request, res: Response) => {
-  const workspace = await Workspace.findByIdAndUpdate(req.params.workspaceId, req.body, { new: true });
+  const patch: Record<string, unknown> = {};
+  for (const k of ["name", "description", "logo", "settings"]) if (k in req.body) patch[k] = req.body[k];
+  if ("name" in patch) {
+    const n = String(patch.name || "").trim();
+    if (n.length < 2 || n.length > 80) throw ApiError.badRequest("Workspace name must be 2 to 80 characters");
+    patch.name = n;
+  }
+  const workspace = await Workspace.findByIdAndUpdate(req.params.workspaceId, patch, { new: true });
   if (!workspace) throw ApiError.notFound("Workspace not found");
   return sendSuccess(res, 200, workspace, "Workspace updated");
 });
@@ -123,17 +130,17 @@ export const deleteWorkspace = catchAsync(async (req: Request, res: Response) =>
 
 /**
  * GET /workspaces/:id/members  (same response shape as before, so existing pickers keep working)
- * Optional: ?status=all|deactivated (admins only), ?role=, ?department=, ?employmentType=, ?q=search
+ * Optional: ?status=all|deactivated (people managers only), ?role=, ?department=, ?employmentType=, ?q=search
  * Phone, address and other personal details are never included here.
  */
 export const listMembers = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId } = req.params;
-  const admin = isAdminRole(roleOf(req));
+  const peopleAdmin = isPeopleAdmin(req.access!);
   const q = req.query as Record<string, string>;
 
   const filter: Record<string, unknown> = { workspaceId };
-  if (admin && q.status === "all") filter.status = { $in: ["active", "deactivated"] };
-  else if (admin && q.status === "deactivated") filter.status = "deactivated";
+  if (peopleAdmin && q.status === "all") filter.status = { $in: ["active", "deactivated"] };
+  else if (peopleAdmin && q.status === "deactivated") filter.status = "deactivated";
   else filter.status = "active";
   if (q.role && ROLES.includes(q.role as WorkspaceRole)) filter.role = q.role;
   if (q.department) filter["profile.department"] = q.department;
@@ -146,54 +153,57 @@ export const listMembers = catchAsync(async (req: Request, res: Response) => {
 
   const members = await WorkspaceMember.find(filter)
     .sort({ joinedAt: 1 })
-    .select(admin ? "-personal" : "-personal -profile.employeeId")
-    .populate("userId", admin ? "name email profileImage jobTitle lastLoginAt mustChangePassword" : "name email profileImage jobTitle")
+    .select(peopleAdmin ? "-personal" : "-personal -profile.employeeId")
+    .populate("userId", peopleAdmin ? "name email profileImage jobTitle lastLoginAt mustChangePassword" : "name email profileImage jobTitle")
     .lean();
-    return sendSuccess(res, 200, await attachRoleInfo(workspaceId, members as any[]), "Members");
+  return sendSuccess(res, 200, await attachRoleInfo(workspaceId, members as any[]), "Members");
 });
 
-/** GET /workspaces/:id/members/:memberId: one person's full profile (personal data only for admins and themself). */
+/** GET /workspaces/:id/members/:memberId: one person's profile. Private details only for people.private holders and the person themself. */
 export const getMember = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId, memberId } = req.params;
   assertId(memberId, "Member");
-  const actor = roleOf(req);
-  const admin = isAdminRole(actor);
+  const a = req.access!;
+  const peopleAdmin = isPeopleAdmin(a);
 
-  const m: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, ...(admin ? {} : { status: "active" }) })
+  const m: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, ...(peopleAdmin ? {} : { status: "active" }) })
     .populate("userId", "name email profileImage jobTitle lastLoginAt createdAt mustChangePassword createdByWorkspaceId")
     .populate("profile.reportingManagerId", "name profileImage")
     .lean();
   if (!m || m.status === "removed") throw ApiError.notFound("Member not found");
 
   const self = String(m.userId._id) === req.user!.id;
+  if (!self && !a.perms.has("people.view")) throw ApiError.forbidden("You do not have permission to view people");
+
   const openTasks = await Task.countDocuments({ workspaceId, assigneeIds: m.userId._id, status: { $ne: "Done" } });
-  const canAdminister = admin && !self && canManageTarget(actor, m.role);
+  const manage = !self && (await canManageMember(a, workspaceId, { userId: m.userId._id, role: m.role }));
+  const awaitingFirstLogin = peopleAdmin && !!m.userId.mustChangePassword && String(m.userId.createdByWorkspaceId) === workspaceId;
 
   const [decorated] = await attachRoleInfo(workspaceId, [m]);
   const { personal, profile, ...rest } = decorated;
   const user = { ...m.userId };
-  if (!admin && !self) delete user.lastLoginAt;
-  if (!admin) delete user.mustChangePassword;
+  if (!peopleAdmin && !self) delete user.lastLoginAt;
+  if (!peopleAdmin) delete user.mustChangePassword;
   delete user.createdByWorkspaceId;
 
   return sendSuccess(
     res, 200,
     {
-      member: { ...rest, userId: user, profile: { ...profile, reportingManagerId: undefined, employeeId: admin || self ? profile?.employeeId : undefined } },
+      member: { ...rest, userId: user, profile: { ...profile, reportingManagerId: undefined, employeeId: peopleAdmin || self ? profile?.employeeId : undefined } },
       reportingManager: profile?.reportingManagerId || null,
-      personal: admin || self ? personal || {} : null,
-      awaitingFirstLogin: admin && !!m.userId.mustChangePassword && String(m.userId.createdByWorkspaceId) === workspaceId,
+      personal: a.perms.has("people.private") || self ? personal || {} : null,
+      awaitingFirstLogin,
       openTasks,
       permissions: {
         isSelf: self,
-        canEdit: self || (admin && canManageTarget(actor, m.role)),
-        canEditAllFields: admin && canManageTarget(actor, m.role),
-        canChangeRole: !self && (req.access?.perms.has("roles.assign") ?? false) && (actor === "OWNER" || m.role !== "OWNER"),
-        canDeactivate: canAdminister && m.status === "active",
-        canReactivate: canAdminister && m.status === "deactivated",
-        canRemove: canAdminister,
-        canResendCredentials: canAdminister && !!m.userId.mustChangePassword && String(m.userId.createdByWorkspaceId) === workspaceId,
-        canViewProgress: self || isManagerRole(actor),
+        canEdit: self || (a.perms.has("people.edit") && manage),
+        canEditAllFields: a.perms.has("people.edit") && (self || manage),
+        canChangeRole: manage && a.perms.has("roles.assign"),
+        canDeactivate: manage && a.perms.has("people.deactivate") && m.status === "active",
+        canReactivate: manage && a.perms.has("people.deactivate") && m.status === "deactivated",
+        canRemove: manage && a.perms.has("people.deactivate"),
+        canResendCredentials: manage && a.perms.has("people.invite") && awaitingFirstLogin,
+        canViewProgress: self || a.perms.has("people.progress"),
       },
     },
     "Member"
@@ -201,19 +211,19 @@ export const getMember = catchAsync(async (req: Request, res: Response) => {
 });
 
 /**
- * POST /workspaces/:id/members: admin creates an account (or adds an existing one) without an invitation.
+ * POST /workspaces/:id/members: creates an account (or adds an existing one) without an invitation. Needs people.invite.
  *  - New email  -> account is created with a temporary password the person MUST change at first login.
  *  - Known email-> that person is simply added; their password and account are never touched.
+ * The role is given as `roleId` (built-in or custom) or, for old callers, as `role`.
  */
 export const createMember = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId } = req.params;
-  const actor = roleOf(req);
+  const actor = req.access!;
   const actorId = req.user!.id;
   const b = req.body;
 
   const email = String(b.email).trim().toLowerCase();
-  const role: WorkspaceRole = b.role || "MEMBER";
-  if (!canAssign(actor, role)) throw ApiError.forbidden("You cannot give this role");
+  const grant = await resolveGrantableRole(actor, workspaceId, { roleId: b.roleId, role: b.role });
 
   const patch = buildPatch(b, { admin: true, self: false });
   if (patch["profile.reportingManagerId"]) {
@@ -255,12 +265,13 @@ export const createMember = catchAsync(async (req: Request, res: Response) => {
 
   if (member) {
     member.status = "active"; // reactivating somebody who was removed or deactivated earlier
-    member.role = role;
     member.deactivatedAt = undefined;
     member.deactivatedBy = undefined;
   } else {
-    member = new WorkspaceMember({ workspaceId, userId: user._id, role });
+    member = new WorkspaceMember({ workspaceId, userId: user._id });
   }
+  member.role = grant.base;
+  member.roleId = grant.roleId;
   member.addedBy = actorId;
   member.addedVia = "manual";
   member.set(patch);
@@ -270,11 +281,11 @@ export const createMember = catchAsync(async (req: Request, res: Response) => {
   const [byName, workspaceName] = await Promise.all([nameOf(actorId), wsName(workspaceId)]);
   const sendDetails = b.sendLoginDetails !== false;
   if (creating) {
-    if (sendDetails) send(email, accountCreatedEmail({ workspaceName, creatorName: byName, email, role, password: plain }));
+    if (sendDetails) send(email, accountCreatedEmail({ workspaceName, creatorName: byName, email, role: grant.name, password: plain }));
   } else {
-    send(email, addedToWorkspaceEmail({ workspaceName, byName, role, url: wsUrl(workspaceId) }));
+    send(email, addedToWorkspaceEmail({ workspaceName, byName, role: grant.name, url: wsUrl(workspaceId) }));
   }
-  await logPeople(workspaceId, actorId, creating ? "member_account_created" : "member_added", member, { title: user.name, role });
+  await logPeople(workspaceId, actorId, creating ? "member_account_created" : "member_added", member, { title: user.name, role: grant.name });
 
   return sendSuccess(
     res, 201,
@@ -291,36 +302,25 @@ export const createMember = catchAsync(async (req: Request, res: Response) => {
 });
 
 /**
- * PATCH /workspaces/:id/members/:memberId: change role (admins) and/or profile fields.
- * Admins may change everything. A person may change only their own work location, skills and personal details.
+ * PATCH /workspaces/:id/members/:memberId: profile fields only (roles are changed with PUT .../role).
+ * people.edit lets you change everything about somebody whose access is not wider than yours.
+ * Everybody may change their own work location, skills and personal details.
  */
 export const updateMember = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId, memberId } = req.params;
   assertId(memberId, "Member");
-  const actor = roleOf(req);
+  const actor = req.access!;
   const actorId = req.user!.id;
-  const admin = isAdminRole(actor);
+  const canEditOthers = actor.perms.has("people.edit");
 
   const member: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, status: { $ne: "removed" } });
   if (!member) throw ApiError.notFound("Member not found");
   const self = String(member.userId) === actorId;
-  if (!self && !admin) throw ApiError.forbidden("You can only edit your own profile");
-  if (!self && !canManageTarget(actor, member.role)) throw ApiError.forbidden("You cannot change an Owner's details");
+  if (!self && !canEditOthers) throw ApiError.forbidden("You can only edit your own profile");
+  if (!self && !(await canManageMember(actor, workspaceId, member))) throw ApiError.forbidden("This person has more access than you, so you cannot change their details");
+  if (req.body.role !== undefined && req.body.role !== member.role) throw ApiError.badRequest("Change roles with the role dropdown on the person's profile");
 
-  const { role } = req.body as { role?: WorkspaceRole };
-  let roleChange: { from: WorkspaceRole; to: WorkspaceRole } | null = null;
-
-  if (role !== undefined && role !== member.role) {
-    if (self) throw ApiError.forbidden("You cannot change your own role");
-    if (!ROLES.includes(role)) throw ApiError.badRequest("Unknown role");
-    if (!canAssign(actor, role)) throw ApiError.forbidden("You cannot give this role");
-    if (member.status !== "active") throw ApiError.badRequest("Reactivate this person before changing the role");
-    if (member.role === "OWNER") await assertNotLastOwner(workspaceId, member._id);
-    roleChange = { from: member.role, to: role };
-    member.role = role;
-  }
-
-  const patch = buildPatch(req.body, { admin: admin && (!self || actor === "OWNER" || actor === "ADMIN"), self });
+  const patch = buildPatch(req.body, { admin: canEditOthers, self });
   if (patch["profile.reportingManagerId"]) {
     if (String(patch["profile.reportingManagerId"]) === String(member.userId)) throw ApiError.badRequest("Someone cannot report to themself");
     const mgr = await WorkspaceMember.exists({ workspaceId, userId: patch["profile.reportingManagerId"], status: "active" });
@@ -331,31 +331,23 @@ export const updateMember = catchAsync(async (req: Request, res: Response) => {
   await member.save();
 
   if (patch["profile.designation"] !== undefined) await User.updateOne({ _id: member.userId }, { $set: { jobTitle: (patch["profile.designation"] as string) || undefined } });
+  if (Object.keys(patch).length) await logPeople(workspaceId, actorId, "member_profile_updated", member, { self });
 
-  if (roleChange) {
-    const target: any = await User.findById(member.userId).select("email");
-    const [byName, workspaceName] = await Promise.all([nameOf(actorId), wsName(workspaceId)]);
-    send(target?.email, memberRoleChangedEmail({ workspaceName, byName, from: roleChange.from, to: roleChange.to, url: wsUrl(workspaceId) }));
-    await logPeople(workspaceId, actorId, "member_role_changed", member, { from: roleChange.from, to: roleChange.to });
-  } else if (Object.keys(patch).length) {
-    await logPeople(workspaceId, actorId, "member_profile_updated", member, { self });
-  }
-
-  return sendSuccess(res, 200, { _id: member._id, role: member.role, status: member.status }, roleChange ? "Role updated" : "Profile saved");
+  return sendSuccess(res, 200, { _id: member._id, role: member.role, status: member.status }, "Profile saved");
 });
 
 /** POST /members/:memberId/deactivate  body: { reassignTo?: memberId }: pauses the account, keeps all data. */
 export const deactivateMember = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId, memberId } = req.params;
   assertId(memberId, "Member");
-  const actor = roleOf(req);
+  const actor = req.access!;
   const actorId = req.user!.id;
 
   const member: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, status: "active" });
   if (!member) throw ApiError.notFound("Active member not found");
   if (String(member.userId) === actorId) throw ApiError.badRequest("You cannot deactivate yourself");
-  if (!canManageTarget(actor, member.role)) throw ApiError.forbidden("You cannot deactivate an Owner");
-  if (member.role === "OWNER") await assertNotLastOwner(workspaceId, member._id);
+  if (!(await canManageMember(actor, workspaceId, member))) throw ApiError.forbidden("This person has more access than you, so you cannot deactivate them");
+  if (member.role === "OWNER" && !member.roleId) await assertNotLastOwner(workspaceId, member._id);
 
   const target = await loadReassignTarget(workspaceId, req.body?.reassignTo, member);
   const moved = target ? await reassignOpenTasks(workspaceId, member.userId, target.userId) : 0;
@@ -378,7 +370,7 @@ export const reactivateMember = catchAsync(async (req: Request, res: Response) =
 
   const member: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, status: "deactivated" });
   if (!member) throw ApiError.notFound("Deactivated member not found");
-  if (!canManageTarget(roleOf(req), member.role)) throw ApiError.forbidden("You cannot change an Owner");
+  if (!(await canManageMember(req.access!, workspaceId, member))) throw ApiError.forbidden("This person has more access than you, so you cannot change them");
 
   member.status = "active";
   member.deactivatedAt = undefined;
@@ -395,14 +387,14 @@ export const reactivateMember = catchAsync(async (req: Request, res: Response) =
 export const removeMember = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId, memberId } = req.params;
   assertId(memberId, "Member");
-  const actor = roleOf(req);
+  const actor = req.access!;
   const actorId = req.user!.id;
 
   const member: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, status: { $ne: "removed" } });
   if (!member) throw ApiError.notFound("Member not found");
   if (String(member.userId) === actorId) throw ApiError.badRequest("You cannot remove yourself");
-  if (!canManageTarget(actor, member.role)) throw ApiError.forbidden("You cannot remove an Owner");
-  if (member.role === "OWNER" && member.status === "active") await assertNotLastOwner(workspaceId, member._id);
+  if (!(await canManageMember(actor, workspaceId, member))) throw ApiError.forbidden("This person has more access than you, so you cannot remove them");
+  if (member.role === "OWNER" && !member.roleId && member.status === "active") await assertNotLastOwner(workspaceId, member._id);
 
   const target = await loadReassignTarget(workspaceId, req.query.reassignTo, member);
   const moved = target ? await reassignOpenTasks(workspaceId, member.userId, target.userId) : 0;
@@ -430,7 +422,8 @@ export const resendCredentials = catchAsync(async (req: Request, res: Response) 
 
   const member: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, status: "active" });
   if (!member) throw ApiError.notFound("Member not found");
-  if (!canManageTarget(roleOf(req), member.role)) throw ApiError.forbidden("Not allowed");
+  if (String(member.userId) === actorId) throw ApiError.badRequest("Use “Forgot password” for your own account");
+  if (!(await canManageMember(req.access!, workspaceId, member))) throw ApiError.forbidden("This person has more access than you, so you cannot reset their login");
 
   const user: any = await User.findById(member.userId).select("+passwordHash email name mustChangePassword createdByWorkspaceId");
   if (!user?.mustChangePassword || String(user.createdByWorkspaceId) !== workspaceId) {
@@ -464,11 +457,11 @@ export const listInvitations = catchAsync(async (req: Request, res: Response) =>
 export const inviteMember = catchAsync(async (req: Request, res: Response) => {
   const workspaceId = req.params.workspaceId;
   const email = String(req.body.email).trim().toLowerCase();
-  const role: WorkspaceRole = req.body.role || "MEMBER";
   const actorId = req.user!.id;
 
-  if (!ROLES.includes(role)) throw ApiError.badRequest("Unknown role");
-  if (!canAssign(roleOf(req), role)) throw ApiError.forbidden("You cannot give this role");
+  // invitations carry a built-in role; custom roles are given after the person has joined
+  const grant = await resolveGrantableRole(req.access!, workspaceId, { role: req.body.role || "MEMBER" });
+  const role = grant.base;
 
   const existingUser: any = await User.findOne({ email }).select("_id");
   if (existingUser && (await WorkspaceMember.exists({ workspaceId, userId: existingUser._id, status: "active" }))) {
@@ -540,6 +533,7 @@ export const acceptInvitation = catchAsync(async (req: Request, res: Response) =
   } else if (member.status !== "active") {
     member.status = "active"; // invited again after leaving / being deactivated
     member.role = invitation.role as WorkspaceRole;
+    member.roleId = undefined;
     member.deactivatedAt = undefined;
     member.deactivatedBy = undefined;
     member.addedBy = invitation.invitedBy;
@@ -562,21 +556,34 @@ export const acceptInvitation = catchAsync(async (req: Request, res: Response) =
 
 /**
  * GET /members/:memberId/progress: what this person has been doing across the workspace.
- * Visible to Owner, Admin, Project Manager and the person themself. Tasks count for the people they are assigned to.
+ * Visible to people.progress holders and the person themself. Tasks count for the people they are assigned to.
+ * Work in projects the VIEWER cannot open (private projects they are not in, projects outside their role's reach) is left out.
  */
 export const memberProgress = catchAsync(async (req: Request, res: Response) => {
   const { workspaceId, memberId } = req.params;
   assertId(memberId, "Member");
+  const a = req.access!;
 
   const member: any = await WorkspaceMember.findOne({ _id: memberId, workspaceId, status: { $ne: "removed" } }).select("userId");
   if (!member) throw ApiError.notFound("Member not found");
   const self = String(member.userId) === req.user!.id;
-  if (!self && !isManagerRole(roleOf(req))) throw ApiError.forbidden("Only managers and the person themself can see progress");
+  if (!self && !a.perms.has("people.progress")) throw ApiError.forbidden("You do not have permission to see a person's progress");
 
   const uid = member.userId;
   const u = new Types.ObjectId(String(uid));
+  const wid = new Types.ObjectId(workspaceId);
   const now = Date.now();
-  const base = { workspaceId, assigneeIds: uid, parentTaskId: { $exists: false } };
+
+  // projects the viewer is not allowed to see do not leak into somebody else's progress
+  let hidden: Types.ObjectId[] = [];
+  if (!self && !isManagerLevel(a)) {
+    const me = req.user!.id;
+    const mine = [{ members: me }, { managerId: me }, { createdBy: me }];
+    const q: any = a.scope === "member" && !a.isOwner ? { workspaceId, $nor: mine } : { workspaceId, visibility: "private", $nor: mine };
+    hidden = (await Project.find(q).distinct("_id")) as Types.ObjectId[];
+  }
+  const notHidden = hidden.length ? { projectId: { $nin: hidden } } : {};
+  const base: any = { workspaceId, assigneeIds: uid, parentTaskId: { $exists: false }, ...notHidden };
 
   const [openTasks, doneTasks, totalAssigned, doneTotal]: [any[], any[], number, number] = await Promise.all([
     Task.find({ ...base, status: { $ne: "Done" } }).select("title taskNumber status priority dueDate estimatedMinutes projectId type").limit(300).lean() as any,
@@ -614,17 +621,17 @@ export const memberProgress = catchAsync(async (req: Request, res: Response) => 
 
   // time logged
   const tAgg: any[] = await TimeEntry.aggregate([
-    { $match: { workspaceId: new Types.ObjectId(workspaceId), userId: u, date: { $gte: new Date(now - 30 * DAY) } } },
+    { $match: { workspaceId: wid, userId: u, date: { $gte: new Date(now - 30 * DAY) }, ...notHidden } },
     { $group: { _id: null, month: { $sum: "$minutes" }, week: { $sum: { $cond: [{ $gte: ["$date", new Date(now - 7 * DAY)] }, "$minutes", 0] } } } },
   ]);
 
   // per project
-  const projects: any[] = await Project.find({ workspaceId, $or: [{ members: uid }, { managerId: uid }, { createdBy: uid }] })
+  const projects: any[] = await Project.find({ workspaceId, _id: { $nin: hidden }, $or: [{ members: uid }, { managerId: uid }, { createdBy: uid }] })
     .select("name color icon status managerId memberRoles")
     .limit(60)
     .lean();
   const perProject: any[] = await Task.aggregate([
-    { $match: { workspaceId: new Types.ObjectId(workspaceId), assigneeIds: u, parentTaskId: { $exists: false }, projectId: { $exists: true } } },
+    { $match: { workspaceId: wid, assigneeIds: u, parentTaskId: { $exists: false }, projectId: { $exists: true, $nin: hidden } } },
     { $group: { _id: "$projectId", total: { $sum: 1 }, done: { $sum: { $cond: [{ $eq: ["$status", "Done"] }, 1, 0] } } } },
   ]);
   const pp = new Map(perProject.map((x) => [String(x._id), x]));
@@ -640,12 +647,16 @@ export const memberProgress = catchAsync(async (req: Request, res: Response) => 
       ])
     : [0, 0];
 
-  const recent: any[] = await ActivityLog.find({ workspaceId, actorId: uid }).sort({ createdAt: -1 }).limit(15).select("action resourceType metadata createdAt").lean();
+  const recent: any[] = await ActivityLog.find({ workspaceId, actorId: uid, ...(hidden.length ? { resourceId: { $nin: hidden } } : {}) })
+    .sort({ createdAt: -1 })
+    .limit(15)
+    .select("action resourceType metadata createdAt")
+    .lean();
 
   const overdue = openTasks.filter((t) => t.dueDate && new Date(t.dueDate).getTime() < now);
   const byStatus: Record<string, number> = {};
   openTasks.forEach((t) => (byStatus[t.status] = (byStatus[t.status] || 0) + 1));
-  const upcoming = [...openTasks].sort((a, b) => (a.dueDate ? +new Date(a.dueDate) : Infinity) - (b.dueDate ? +new Date(b.dueDate) : Infinity)).slice(0, 8);
+  const upcoming = [...openTasks].sort((x, y) => (x.dueDate ? +new Date(x.dueDate) : Infinity) - (y.dueDate ? +new Date(y.dueDate) : Infinity)).slice(0, 8);
 
   return sendSuccess(
     res, 200,
@@ -665,7 +676,7 @@ export const memberProgress = catchAsync(async (req: Request, res: Response) => 
       },
       workload: {
         openTasks: openTasks.length,
-        estimatedMinutes: openTasks.reduce((a, t) => a + (t.estimatedMinutes || 0), 0),
+        estimatedMinutes: openTasks.reduce((s, t) => s + (t.estimatedMinutes || 0), 0),
         byStatus,
         dueThisWeek: openTasks.filter((t) => t.dueDate && new Date(t.dueDate).getTime() >= now && new Date(t.dueDate).getTime() <= now + 7 * DAY).length,
       },

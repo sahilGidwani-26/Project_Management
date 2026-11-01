@@ -15,7 +15,7 @@ export const MANAGERS_ONLY: WorkspaceRole[] = ["OWNER", "ADMIN", "PROJECT_MANAGE
  * Loads the requester's access for the workspace a TASK belongs to, and checks they may open the task's project
  * (private projects, "only my projects" roles). Sets req.access / req.workspaceRole and (for project tasks) req.projectRole.
  */
-async function attachTaskAccess(req: Request, taskId: string) {
+export async function attachTaskAccess(req: Request, taskId: string) {
   if (!/^[a-f\d]{24}$/i.test(String(taskId))) throw ApiError.notFound("Task not found");
   const task = await Task.findById(taskId).select("workspaceId projectId");
   if (!task) throw ApiError.notFound("Task not found");

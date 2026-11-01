@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { WorkspaceMember, WorkspaceRole } from "../models/WorkspaceMember";
 import { ApiError } from "../utils/ApiError";
+import { AccessRole } from "../models/AccessRole";
+import { ALL_PERMS, AccessCtx, canGiveRoleDoc, compatRole, ensureSystemRoles, getAccess, normalize } from "./permissions";
 
 export const ROLES: WorkspaceRole[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "MEMBER", "VIEWER"];
 export const RANK: Record<WorkspaceRole, number> = { VIEWER: 1, MEMBER: 2, PROJECT_MANAGER: 3, ADMIN: 4, OWNER: 5 };
@@ -128,4 +130,41 @@ export async function assertNoCycle(workspaceId: string, userId: string, manager
     const m: any = await WorkspaceMember.findOne({ workspaceId, userId: cur, status: { $ne: "removed" } }).select("profile.reportingManagerId").lean();
     cur = m?.profile?.reportingManagerId ? String(m.profile.reportingManagerId) : undefined;
   }
+}
+
+const OID = /^[a-f\d]{24}$/i;
+
+/**
+ * May `actor` change this person (edit, deactivate, remove...)? An Owner may manage anybody, nobody may touch an Owner,
+ * and everybody else may only manage people whose access is no wider than their own.
+ */
+export async function canManageMember(actor: AccessCtx, workspaceId: string, target: { userId: unknown; role: string }) {
+  if (actor.isOwner) return true;
+  if (target.role === "OWNER") return false;
+  const t = await getAccess(workspaceId, String(target.userId));
+  if (!t) return true; // deactivated: they have no access right now
+  return [...t.perms].every((p) => actor.perms.has(p));
+}
+
+/** Finds the role (built-in key or custom roleId) and makes sure the actor is allowed to give it. */
+export async function resolveGrantableRole(actor: AccessCtx, workspaceId: string, input: { roleId?: unknown; role?: unknown }) {
+  await ensureSystemRoles(workspaceId);
+  let doc: any;
+  if (input.roleId) {
+    if (!OID.test(String(input.roleId))) throw ApiError.badRequest("Unknown role");
+    doc = await AccessRole.findOne({ _id: input.roleId, workspaceId }).lean();
+  } else {
+    const key = String(input.role || "MEMBER");
+    if (!ROLES.includes(key as WorkspaceRole)) throw ApiError.badRequest("Unknown role");
+    doc = await AccessRole.findOne({ workspaceId, systemKey: key }).lean();
+  }
+  if (!doc) throw ApiError.notFound("Role not found");
+  if (!canGiveRoleDoc(actor, doc)) throw ApiError.forbidden(`You cannot give the ${doc.name} role. It has permissions you do not have yourself`);
+  const perms = doc.systemKey === "OWNER" ? ALL_PERMS : normalize(doc.permissions || []);
+  return {
+    doc,
+    name: doc.name as string,
+    base: (doc.systemKey || compatRole(new Set(perms))) as WorkspaceRole, // what the old role field stores
+    roleId: doc.systemKey ? undefined : doc._id, // only custom roles keep an id
+  };
 }
