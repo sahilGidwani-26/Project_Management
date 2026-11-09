@@ -7,6 +7,7 @@ import { startDueDateReminderJob } from "./jobs/dueDateReminder";
 import { startProjectJobs } from "./jobs/projectJobs";
 import { startForecastJob } from "./jobs/forecastJob";
 import { startStandupJob } from "./jobs/standupJob";
+import { startAttendanceJob } from "./jobs/attendanceJob";
 import { env } from "./config/env";
 
 async function bootstrap() {
@@ -22,6 +23,7 @@ async function bootstrap() {
   startProjectJobs();
   startForecastJob(io);
   startStandupJob();
+  startAttendanceJob(io);
 
   httpServer.listen(env.PORT, () => {
     console.log(`[server] Running on http://localhost:${env.PORT} (${env.NODE_ENV})`);

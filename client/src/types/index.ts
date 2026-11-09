@@ -786,8 +786,57 @@ export interface AccessRoleItem {
 }
 
 export interface MyPermissions {
+  memberId: string;
   role: { id: string | null; key: WorkspaceRole | null; name: string; color: string | null; isOwner: boolean };
   scope: "all" | "member";
   legacyRole: WorkspaceRole;
   permissions: string[];
+}
+
+export type AttStatus = "na" | "future" | "holiday" | "weekoff" | "leave" | "present" | "half_day" | "absent" | "incomplete" | "working" | "pending";
+export interface AttSession { in: number; out: number | null; mode: string }
+export interface AttLeaveMark { name: string; code: string; paid: boolean; half: string }
+export interface AttDay {
+  date: string; status: AttStatus; worked: number; firstIn: number | null; lastOut: number | null; late: boolean; earlyLeave: boolean; overtime: number;
+  short: boolean; workedOff: boolean; mode: string | null; sessions: AttSession[]; holiday: string | null; leave: AttLeaveMark[] | null; manual: string | null; manualNote: string | null;
+}
+export interface AttSettings {
+  timezone: string; workStart: string; workEnd: string; workingDays: number[]; offSaturdays: number[]; graceMinutes: number; fullDayMinutes: number; halfDayMinutes: number;
+  trackingStartDate: string | null; reminderEnabled: boolean; reminderTime: string; checkoutReminderEnabled: boolean; checkoutReminderTime: string;
+}
+export interface AttSummary {
+  workingDays: number; present: number; halfDays: number; absent: number; incomplete: number; paidLeave: number; unpaidLeave: number; late: number; earlyLeave: number;
+  holidays: number; weekOffs: number; workedMinutes: number; overtimeMinutes: number; daysWorked: number; avgMinutes: number;
+  attendanceRate: number | null; punctuality: number; hoursScore: number; score: number | null;
+}
+export interface AttRating { stars: number | null; label: string }
+export interface LeaveBalance { typeId: string; name: string; code: string; color: string; paid: boolean; quota: number; used: number; pending: number; remaining: number | null }
+export interface AttToday {
+  date: string; timezone: string; now: number; shift: { start: string; end: string; graceMinutes: number; fullDayMinutes: number; halfDayMinutes: number };
+  holiday: string | null; onLeave: boolean; isWorkingDay: boolean; openSince: number | null; day: AttDay;
+}
+export interface AttMonth { from: string; to: string; days: AttDay[]; summary: AttSummary; rating: AttRating; leaveBalances: LeaveBalance[]; upcomingHolidays: { date: string; name: string }[]; shift: AttSettings }
+export interface AttPerson { userId: string; memberId?: string; name: string; email: string; profileImage?: string; designation?: string }
+export type AttLiveRow = AttPerson & AttDay;
+export interface AttLive {
+  date: string; today: string; timezone: string; dayType: "working" | "holiday" | "weekoff"; holiday: string | null; rows: AttLiveRow[];
+  summary: { total: number; present: number; late: number; halfDay: number; absent: number; notYet: number; onLeave: number; stillIn: number }; shift: AttSettings;
+}
+export type AttTeamRow = AttPerson & { summary: AttSummary; rating: AttRating };
+export interface AttTeam {
+  from: string; to: string; rows: AttTeamRow[]; shift: AttSettings;
+  overall: { people: number; avgScore: number | null; avgAttendance: number | null; avgPunctuality: number | null; totalLate: number; totalAbsent: number; totalLeaveDays: number; totalHours: number; ratingSpread: { stars: number; count: number }[] };
+}
+export interface AttMatrix {
+  from: string; to: string; dates: string[]; holidays: { date: string; name: string }[];
+  rows: { userId: string; name: string; profileImage?: string; codes: string[]; present: number; halfDays: number; absent: number; late: number; leave: number }[];
+}
+export interface LeaveTypeItem { _id: string; name: string; code: string; color: string; yearlyQuota: number; paid: boolean; active: boolean }
+export interface LeaveRequestItem {
+  _id: string; from: string; to: string; half: string; days: number; reason: string; status: "pending" | "approved" | "rejected" | "cancelled"; reviewNote: string; createdAt: string;
+  user?: { _id: string; name: string; email: string; profileImage?: string }; type?: { _id: string; name: string; code: string; color: string; paid: boolean }; reviewedBy?: { _id: string; name: string } | null;
+}
+export interface AttEmployee {
+  person: AttPerson & { tracked: boolean; exempt: boolean }; from: string; to: string; days: AttDay[]; summary: AttSummary; rating: AttRating;
+  leaveRequests: { _id: string; from: string; to: string; days: number; status: string; typeId?: { name: string; color: string } }[];
 }

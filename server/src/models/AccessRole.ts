@@ -12,6 +12,8 @@ const roleSchema = new Schema(
     /** "all" = every project of the workspace, "member" = only projects the person belongs to */
     scope: { type: String, enum: ["all", "member"], default: "all" },
     permissions: [String],
+    /** Built-in roles only: which version of the default permissions was last applied (new modules are added once). */
+    seedVersion: Number,
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

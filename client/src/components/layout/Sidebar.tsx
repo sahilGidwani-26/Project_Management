@@ -15,6 +15,7 @@ import {
   TrendingUp,
   ClipboardList,
   Lock,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
@@ -39,6 +40,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   "my-tasks": CheckSquare,
   standup: ClipboardList,
   calendar: CalendarDays,
+  attendance: CalendarCheck,
   chat: MessageSquare,
   team: Users,
   analytics: BarChart3,
