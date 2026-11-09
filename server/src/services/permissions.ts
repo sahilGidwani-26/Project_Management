@@ -14,6 +14,11 @@ const EXTRA_REQUIRES: Record<string, string[]> = {
   "chat.view": ["people.view"],
   "roles.manage": ["people.view"],
   "roles.assign": ["people.view"],
+  "attendance.team": ["people.view"],
+  "attendance.manage": ["attendance.team"],
+  "attendance.export": ["attendance.team"],
+  "attendance.settings": ["attendance.team"],
+  "leave.approve": ["people.view"],
 };
 
 function mod(key: string, label: string, description: string, actions: [string, string][]): PermModule {
@@ -55,6 +60,11 @@ export const CATALOG: PermModule[] = [
   mod("analytics", "Workspace analytics", "The Analytics page", [["view", "View analytics"]]),
   mod("calendar", "Calendar", "Meetings and events", [["view", "View the calendar"], ["create", "Create events and meetings"]]),
   mod("chat", "Team chat", "Channels and direct messages", [["view", "Use team chat"], ["send", "Send messages"], ["channels", "Create channels"]]),
+  mod("attendance", "Attendance", "Check-in, check-out and attendance reports", [
+    ["view", "View own attendance"], ["mark", "Check in and check out"], ["team", "View everybody's attendance and analytics"],
+    ["manage", "Correct attendance records"], ["export", "Download reports (PDF and Excel)"], ["settings", "Manage attendance settings and holidays"],
+  ]),
+  mod("leave", "Leave", "Leave requests and balances", [["view", "View own leave and balance"], ["request", "Request leave"], ["approve", "Approve or reject leave requests"]]),
   mod("people", "People", "The team directory and profiles", [
     ["view", "See names, photos and roles"], ["progress", "See a person's progress"], ["private", "See private details (phone, address)"],
     ["invite", "Add and invite people"], ["edit", "Edit other people's profiles"], ["deactivate", "Deactivate and remove people"], ["bulk", "Import and export people"],
@@ -82,15 +92,18 @@ export function normalize(list: Iterable<string>): string[] {
 
 /* ----------------------------- built-in roles ----------------------------- */
 
-const views = ALL_PERMS.filter((p) => p.endsWith(".view") && p !== "roles.view");
+const isHr = (p: string) => p.startsWith("attendance.") || p.startsWith("leave.");
+// Viewers are outsiders by default: no attendance or leave pages for them.
+const views = ALL_PERMS.filter((p) => p.endsWith(".view") && p !== "roles.view" && !isHr(p));
 const memberExtra = [
   "tasks.create", "tasks.edit", "tasks.assign", "tasks.comment", "bugs.create", "bugs.edit", "milestones.edit", "releases.edit", "sprints.edit", "sprints.run",
   "timeline.edit", "risks.edit", "time.log", "files.upload", "discussion.post", "poker.vote", "poker.facilitate", "calendar.create", "chat.send",
+  "attendance.view", "attendance.mark", "leave.view", "leave.request",
 ];
 const managerExtra = [
   "projects.create", "projects.edit", "projects.archive", "projects.members", "projects.templates", "projects.export", "milestones.delete", "tasks.delete", "bugs.delete",
   "releases.publish", "releases.delete", "github.configure", "sprints.delete", "standup.team", "files.delete", "discussion.moderate", "risks.delete", "time.delete",
-  "automation.edit", "reports.export", "chat.channels", "people.progress",
+  "automation.edit", "reports.export", "chat.channels", "people.progress", "attendance.team", "leave.approve",
 ];
 
 export const DEFAULT_PERMS: Record<WorkspaceRole, string[]> = {
@@ -115,15 +128,36 @@ export const SYSTEM_ORDER = SYSTEM_META.map((m) => m.key);
  * whose permissions the custom role fully contains, so those old checks can never give MORE than the custom role allows.
  */
 export function compatRole(perms: Set<string>): WorkspaceRole {
-  for (const r of ["ADMIN", "PROJECT_MANAGER", "MEMBER"] as WorkspaceRole[]) if (DEFAULT_PERMS[r].every((p) => perms.has(p))) return r;
+  for (const r of ["ADMIN", "PROJECT_MANAGER", "MEMBER"] as WorkspaceRole[]) {
+    // attendance and leave are new, so they are not part of this old comparison
+    if (DEFAULT_PERMS[r].filter((p) => !isHr(p)).every((p) => perms.has(p))) return r;
+  }
   return "VIEWER";
 }
 
 /* -------------------------------- seeding -------------------------------- */
 
+const SEED_VERSION = 2; // 2 = attendance and leave modules added
+const ADDED_V2 = new Set(ALL_PERMS.filter(isHr));
 const seeded = new Set<string>();
 
-/** Creates the 5 built-in roles of a workspace the first time anything needs them. */
+/** Built-in roles that were created before a version get the new permissions ONCE (nothing is ever taken away). */
+async function upgradeRoles(workspaceId: string) {
+  const old: any[] = await AccessRole.find({ workspaceId, systemKey: { $in: SYSTEM_ORDER }, seedVersion: { $ne: SEED_VERSION } });
+  for (const r of old) {
+    const add = (DEFAULT_PERMS[r.systemKey as WorkspaceRole] || []).filter((p) => ADDED_V2.has(p));
+    r.permissions = [...new Set([...(r.permissions || []), ...add])];
+    r.seedVersion = SEED_VERSION;
+    await r.save();
+  }
+  // the stored base role of custom-role members follows the default permissions, so keep it in sync after defaults change
+  const custom: any[] = await AccessRole.find({ workspaceId, systemKey: { $exists: false } }).select("permissions").lean();
+  for (const c of custom) {
+    await WorkspaceMember.updateMany({ workspaceId, roleId: c._id }, { $set: { role: compatRole(new Set(normalize(c.permissions || []))) } });
+  }
+}
+
+/** Creates the 5 built-in roles of a workspace the first time anything needs them (and upgrades old ones once per server start). */
 export async function ensureSystemRoles(workspaceId: string) {
   if (seeded.has(workspaceId)) return;
   const have: string[] = await AccessRole.find({ workspaceId, systemKey: { $in: SYSTEM_ORDER } }).distinct("systemKey");
@@ -131,13 +165,14 @@ export async function ensureSystemRoles(workspaceId: string) {
   if (missing.length) {
     try {
       await AccessRole.insertMany(
-        missing.map((m) => ({ workspaceId, name: m.name, nameLower: m.name.toLowerCase(), description: m.description, color: m.color, systemKey: m.key, scope: "all", permissions: DEFAULT_PERMS[m.key] })),
+        missing.map((m) => ({ workspaceId, name: m.name, nameLower: m.name.toLowerCase(), description: m.description, color: m.color, systemKey: m.key, scope: "all", permissions: DEFAULT_PERMS[m.key], seedVersion: SEED_VERSION })),
         { ordered: false }
       );
     } catch (e: any) {
       if (e?.code !== 11000 && !e?.writeErrors) throw e; // another request seeded at the same moment
     }
   }
+  await upgradeRoles(workspaceId);
   seeded.add(workspaceId);
 }
 
@@ -192,7 +227,6 @@ export async function attachRoleInfo(workspaceId: string, members: any[]) {
 
 /** Owner, Admin and Project Manager level people (and custom roles that are as strong as those) see every project, private ones too. */
 export const isManagerLevel = (a: AccessCtx) => a.isOwner || ["OWNER", "ADMIN", "PROJECT_MANAGER"].includes(a.legacyRole);
-
 
 /** Can this person give this role away? Owner can give any. Nobody can give a role with permissions they lack, or a wider project reach than their own. */
 export function canGiveRoleDoc(actor: AccessCtx, role: any) {

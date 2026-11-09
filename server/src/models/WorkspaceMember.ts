@@ -10,6 +10,8 @@ export interface IWorkspaceMember extends Document {
   role: WorkspaceRole;
   /** Set only when the person has a custom role. For the built-in roles it stays empty and `role` decides. */
   roleId?: Types.ObjectId;
+  /** Excluded from attendance tracking (for example a client or a freelancer). */
+  attendanceExempt?: boolean;
   /** "deactivated" = account paused (data stays, no access). "removed" = left the workspace. Only "active" can use the workspace. */
   status: MemberStatus;
   joinedAt: Date;
@@ -47,6 +49,7 @@ const workspaceMemberSchema = new Schema<IWorkspaceMember>(
       default: "MEMBER",
     },
     roleId: { type: Schema.Types.ObjectId, ref: "AccessRole" },
+    attendanceExempt: { type: Boolean, default: false },
     status: { type: String, enum: ["active", "deactivated", "removed"], default: "active" },
     joinedAt: { type: Date, default: Date.now },
     profile: {

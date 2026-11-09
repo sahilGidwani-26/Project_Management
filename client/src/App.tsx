@@ -58,6 +58,7 @@ import MemberDetail from "@/pages/MemberDetail";
 import TeamDepartments from "@/pages/TeamDepartments";
 import TeamOrgChart from "@/pages/TeamOrgChart";
 import Roles from "@/pages/Roles";
+import Attendance from "@/pages/Attendance";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -86,6 +87,8 @@ export default function App() {
                   <Route path="projects" element={<Projects />} />
                   <Route path="tasks" element={<Tasks />} />
                   <Route path="calendar" element={<CalendarPage />} />
+                  <Route path="attendance" element={<Attendance />} />
+                  <Route path="attendance/:tab" element={<Attendance />} />
                   <Route path="projects/:projectId" element={<ProjectLayout />}>
                     <Route index element={<Navigate to="overview" replace />} />
                     <Route path="overview" element={<ProjectOverview />} />

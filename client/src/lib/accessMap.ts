@@ -9,6 +9,7 @@ export const NAV_ACCESS: NavAccess[] = [
   { to: "my-tasks", label: "My Tasks", perm: "tasks.view" },
   { to: "standup", label: "Standup", perm: "standup.view" },
   { to: "calendar", label: "Calendar", perm: "calendar.view" },
+  { to: "attendance", label: "Attendance", any: ["attendance.view", "leave.view"] },
   { to: "chat", label: "Team Chat", perm: "chat.view" },
   { to: "team", label: "Team", perm: "people.view" },
   { to: "analytics", label: "Analytics", perm: "analytics.view" },

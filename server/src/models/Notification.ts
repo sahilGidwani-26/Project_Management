@@ -12,7 +12,9 @@ export type NotificationType =
   | "meeting_updated"
   | "meeting_cancelled"
   | "poker_started"
-  | "forecast_risk";
+  | "forecast_risk"
+  | "leave"
+  | "attendance_reminder";
 
 export interface INotification extends Document {
   _id: Types.ObjectId;

@@ -19,6 +19,7 @@ import searchRoutes from "./search.routes";
 import eventRoutes from "./event.routes";
 import googleCalendarRoutes from "./googleCalendar.routes";
 import standupRoutes from "./standup.routes";
+import attendanceRoutes from "./attendance.routes";
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.use("/integrations/github/webhook", githubWebhookRoutes);
 router.use("/search", searchRoutes);
 router.use("/events", eventRoutes);
 router.use("/standup", standupRoutes);
-
+router.use("/attendance", attendanceRoutes);
 router.get("/health", (_req, res) => res.json({ success: true, message: "API is healthy" }));
 
 export default router;
