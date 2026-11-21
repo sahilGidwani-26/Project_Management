@@ -21,12 +21,14 @@ import googleCalendarRoutes from "./googleCalendar.routes";
 import standupRoutes from "./standup.routes";
 import attendanceRoutes from "./attendance.routes";
 import meetingRoutes from "./meeting.routes";
+import dashboardRoutes from "./dashboard.routes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/auth/google-calendar", googleCalendarRoutes);
 router.use("/meetings", meetingRoutes);
+router.use("/dashboard", dashboardRoutes);
 router.use("/workspaces", workspaceRoutes);
 router.use("/projects", projectRoutes);
 router.use("/tasks", taskRoutes);
