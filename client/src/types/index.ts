@@ -840,3 +840,28 @@ export interface AttEmployee {
   person: AttPerson & { tracked: boolean; exempt: boolean }; from: string; to: string; days: AttDay[]; summary: AttSummary; rating: AttRating;
   leaveRequests: { _id: string; from: string; to: string; days: number; status: string; typeId?: { name: string; color: string } }[];
 }
+
+export interface MeetingItem {
+  _id: string;
+  workspaceId: string;
+  title: string;
+  code: string;
+  link: string;
+  access: "invited" | "workspace" | "open";
+  hasPasscode: boolean;
+  waitingRoom: boolean;
+  locked: boolean;
+  maxParticipants: number;
+  shareBy: "everyone" | "host";
+  chatEnabled: boolean;
+  scheduledAt: string | null;
+  expiresAt: string | null;
+  status: "active" | "ended";
+  endedAt: string | null;
+  createdAt: string;
+  host: { _id: string; name?: string; profileImage?: string };
+  live: number;
+  participants?: number;
+  invited?: { _id: string; name: string; email: string; profileImage?: string }[];
+  expired?: boolean;
+}

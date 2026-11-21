@@ -14,7 +14,8 @@ export type NotificationType =
   | "poker_started"
   | "forecast_risk"
   | "leave"
-  | "attendance_reminder";
+  | "attendance_reminder"
+  | "meeting_invite";
 
 export interface INotification extends Document {
   _id: Types.ObjectId;

@@ -8,6 +8,8 @@ import { env } from "./config/env";
 
 export function createApp(): Application {
   const app = express();
+  // Behind a proxy (Render, Nginx, ...) the real visitor address is in X-Forwarded-For. Needed for the join rate limits.
+  if (env.NODE_ENV === "production") app.set("trust proxy", 1);
 
   app.use(
     cors({

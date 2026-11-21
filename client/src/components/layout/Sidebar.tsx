@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Lock,
   CalendarCheck,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
@@ -46,6 +47,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   analytics: BarChart3,
   forecast: TrendingUp,
   roles: Lock,
+  meetings: Video,
 };
 
 export function Sidebar() {
