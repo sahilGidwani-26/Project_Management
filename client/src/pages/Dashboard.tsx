@@ -1,163 +1,78 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { FolderKanban, CheckSquare, Users, AlertTriangle } from "lucide-react";
+import { CalendarCheck, Check, FolderKanban, LayoutDashboard, ListChecks, RefreshCw, Video } from "lucide-react";
 import { api } from "@/lib/api";
-import { WorkspaceForecast } from "@/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { PageHeader } from "@/components/common/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StateBadge, fmtDate } from "@/components/forecast/forecastUi";
+import { DashboardGrid, WidgetTray } from "@/components/dashboard/DashboardGrid";
+import { useDashLayout } from "@/components/dashboard/useDashLayout";
+import type { DashOverview } from "@/components/dashboard/dashTypes";
+import { cn } from "@/lib/utils";
 
-interface WorkspaceAnalytics {
-  totalProjects: number;
-  activeProjects: number;
-  completedProjects: number;
-  teamMembers: number;
-  overdueTasks: number;
-  tasksByStatus: { _id: string; count: number }[];
-}
-
-const statConfig = [
-  { key: "totalProjects", label: "Total Projects", icon: FolderKanban },
-  { key: "activeProjects", label: "Active Projects", icon: CheckSquare },
-  { key: "teamMembers", label: "Team Members", icon: Users },
-  { key: "overdueTasks", label: "Overdue Tasks", icon: AlertTriangle },
-] as const;
+const greeting = () => { const h = new Date().getHours(); return h < 5 ? "Working late" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
 
 export default function Dashboard() {
   const { workspaceId } = useParams();
+  const w = workspaceId!;
+  const { user } = useAuth();
+  const { can } = usePermissions();
+  const { currentWorkspace } = useWorkspace();
+  const [editing, setEditing] = useState(false);
+  const L = useDashLayout(w);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["workspace-analytics", workspaceId],
-    queryFn: async () => (await api.get(`/analytics/workspace/${workspaceId}`)).data.data as WorkspaceAnalytics,
-    enabled: !!workspaceId,
+  const { data, isError, refetch, isFetching } = useQuery({
+    queryKey: ["dash-overview", w],
+    queryFn: async () => (await api.get(`/dashboard/workspace/${w}/overview`)).data.data as DashOverview,
+    enabled: !!w,
+    refetchInterval: 60_000,
   });
 
-  const { data: activity } = useQuery({
-    queryKey: ["workspace-activity", workspaceId],
-    queryFn: async () => (await api.get(`/analytics/workspace/${workspaceId}/activity?limit=8`)).data.data.items,
-    enabled: !!workspaceId,
-  });
-
-  const { data: forecast, isLoading: forecastLoading } = useQuery({
-    queryKey: ["workspace-forecast", workspaceId],
-    queryFn: async () => (await api.get(`/analytics/workspace/${workspaceId}/forecast`)).data.data as WorkspaceForecast,
-    enabled: !!workspaceId,
-  });
-
-  const chartData = (data?.tasksByStatus || []).map((s) => ({ status: s._id, count: s.count }));
-  const risky = (forecast?.projects || []).filter((p) => p.state === "AT_RISK" || p.state === "NEEDS_ATTENTION").slice(0, 5);
+  const quick = [
+    { to: "projects", label: "Projects", icon: FolderKanban, ok: can("projects.view") },
+    { to: "my-tasks", label: "My tasks", icon: ListChecks, ok: can("tasks.view") },
+    { to: "attendance", label: "Attendance", icon: CalendarCheck, ok: can("attendance.view") },
+    { to: "meetings", label: "Meetings", icon: Video, ok: can("meetings.view") },
+  ].filter((q) => q.ok);
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="Your workspace at a glance" />
-      <div className="p-6 space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {statConfig.map((s) => (
-            <Card key={s.key}>
-              <CardContent className="flex items-center gap-4 p-5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <s.icon className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  {isLoading ? (
-                    <Skeleton className="h-6 w-10" />
-                  ) : (
-                    <p className="text-2xl font-semibold">{data?.[s.key] ?? 0}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      <PageHeader
+        title={`${greeting()}, ${user?.name?.split(" ")[0] || "there"}`}
+        description={`${currentWorkspace?.name || "Your workspace"} · ${new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}`}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="ghost" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} /></Button>
+            <Button size="sm" variant={editing ? "default" : "outline"} onClick={() => setEditing((e) => !e)}>
+              {editing ? <><Check className="h-4 w-4" /> Done</> : <><LayoutDashboard className="h-4 w-4" /> Customize</>}
+            </Button>
+          </div>
+        }
+      />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Delivery forecast</CardTitle>
-            <Link to={`/app/${workspaceId}/forecast`} className="text-xs text-primary hover:underline">View all</Link>
-          </CardHeader>
-          <CardContent>
-            {forecastLoading && <Skeleton className="h-16 w-full" />}
-            {!forecastLoading && !forecast?.projects.length && (
-              <p className="text-sm text-muted-foreground">No open projects to forecast yet.</p>
-            )}
-            {!forecastLoading && !!forecast?.projects.length && !risky.length && (
-              <p className="text-sm text-muted-foreground">
-                {forecast.summary.onTrack + forecast.summary.complete > 0
-                  ? "No project is at risk of missing its deadline."
-                  : "Forecasts appear once your projects have a week of finished tasks."}
-              </p>
-            )}
-            {!!risky.length && (
-              <div className="divide-y divide-border">
-                {risky.map((p) => (
-                  <Link
-                    key={p.project._id}
-                    to={`/app/${workspaceId}/projects/${p.project._id}/forecast`}
-                    className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-secondary/30"
-                  >
-                    <span className="font-medium"><span className="mr-2">{p.project.icon || "📁"}</span>{p.project.name}</span>
-                    <span className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {p.probability != null && <span>{p.probability}% chance</span>}
-                      <span>safe date {fmtDate(p.p85)}</span>
-                      <span>deadline {fmtDate(p.deadline)}</span>
-                      <StateBadge state={p.state} />
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="space-y-4 p-4 md:p-6">
+        {quick.length > 0 && !editing && (
+          <div className="flex flex-wrap gap-2">
+            {quick.map((q) => (
+              <Link key={q.to} to={`/app/${w}/${q.to}`} className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm transition hover:border-primary/40 hover:bg-primary/5"><q.icon className="h-3.5 w-3.5 text-muted-foreground" />{q.label}</Link>
+            ))}
+          </div>
+        )}
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Tasks by status</CardTitle>
-            </CardHeader>
-            <CardContent className="h-64">
-              {isLoading ? (
-                <Skeleton className="h-full w-full" />
-              ) : chartData.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="status" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                    />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  No tasks yet — create a project to get started.
-                </div>
-              )}
-            </CardContent>
+        {editing && <WidgetTray L={L} />}
+
+        {isError && (
+          <Card className="flex items-center justify-between gap-3 border-destructive/40 p-4 text-sm">
+            <span>Could not load the dashboard data.</span><Button size="sm" variant="outline" onClick={() => refetch()}>Try again</Button>
           </Card>
+        )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent activity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!activity?.length && <p className="text-sm text-muted-foreground">No activity yet.</p>}
-              {activity?.map((a: any) => (
-                <div key={a._id} className="flex items-start gap-2.5 text-sm">
-                  <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                  <div>
-                    <span className="font-medium">{a.actorId?.name || "Someone"}</span>{" "}
-                    <span className="text-muted-foreground">{a.action.replace(/_/g, " ")}</span>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+        {!L.ready ? <Skeleton className="h-96" /> : <DashboardGrid L={L} editing={editing} ov={data} workspaceId={w} />}
       </div>
     </div>
   );
