@@ -5,6 +5,7 @@ import { env } from "../config/env";
 import { Project } from "../models/Project";
 import { PokerSession } from "../models/Poker";
 import { resolveProjectRole } from "../utils/projectAccess";
+import { initMeetNamespace } from "./meet";
 
 interface AuthedSocket extends Socket {
   userId?: string;
@@ -102,6 +103,7 @@ export function initSocket(httpServer: HTTPServer): SocketIOServer {
       // Presence cleanup hook (e.g. broadcast "user offline") can go here.
     });
   });
+    initMeetNamespace(io);
 
   return io;
 }

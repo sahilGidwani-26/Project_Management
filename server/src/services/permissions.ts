@@ -18,6 +18,7 @@ const EXTRA_REQUIRES: Record<string, string[]> = {
   "attendance.manage": ["attendance.team"],
   "attendance.export": ["attendance.team"],
   "attendance.settings": ["attendance.team"],
+  "meetings.create": ["people.view"],
   "leave.approve": ["people.view"],
 };
 
@@ -59,6 +60,9 @@ export const CATALOG: PermModule[] = [
   mod("reports", "Project reports", "The Reports tab", [["view", "View project reports"], ["export", "Export reports"]]),
   mod("analytics", "Workspace analytics", "The Analytics page", [["view", "View analytics"]]),
   mod("calendar", "Calendar", "Meetings and events", [["view", "View the calendar"], ["create", "Create events and meetings"]]),
+  mod("meetings", "Meetings", "Video meetings inside the workspace", [
+    ["view", "See and join meetings"], ["create", "Start, schedule and share meetings"], ["manage", "End or change any meeting"],
+  ]),
   mod("chat", "Team chat", "Channels and direct messages", [["view", "Use team chat"], ["send", "Send messages"], ["channels", "Create channels"]]),
   mod("attendance", "Attendance", "Check-in, check-out and attendance reports", [
     ["view", "View own attendance"], ["mark", "Check in and check out"], ["team", "View everybody's attendance and analytics"],
@@ -93,16 +97,17 @@ export function normalize(list: Iterable<string>): string[] {
 /* ----------------------------- built-in roles ----------------------------- */
 
 const isHr = (p: string) => p.startsWith("attendance.") || p.startsWith("leave.");
+const isLater = (p: string) => isHr(p) || p.startsWith("meetings.");
 // Viewers are outsiders by default: no attendance or leave pages for them.
 const views = ALL_PERMS.filter((p) => p.endsWith(".view") && p !== "roles.view" && !isHr(p));
 const memberExtra = [
   "tasks.create", "tasks.edit", "tasks.assign", "tasks.comment", "bugs.create", "bugs.edit", "milestones.edit", "releases.edit", "sprints.edit", "sprints.run",
-  "timeline.edit", "risks.edit", "time.log", "files.upload", "discussion.post", "poker.vote", "poker.facilitate", "calendar.create", "chat.send",
+  "timeline.edit", "risks.edit", "time.log", "files.upload", "discussion.post","meetings.create", "poker.vote", "poker.facilitate", "calendar.create", "chat.send",
   "attendance.view", "attendance.mark", "leave.view", "leave.request",
 ];
 const managerExtra = [
   "projects.create", "projects.edit", "projects.archive", "projects.members", "projects.templates", "projects.export", "milestones.delete", "tasks.delete", "bugs.delete",
-  "releases.publish", "releases.delete", "github.configure", "sprints.delete", "standup.team", "files.delete", "discussion.moderate", "risks.delete", "time.delete",
+  "releases.publish", "releases.delete", "meetings.manage", "github.configure", "sprints.delete", "standup.team", "files.delete", "discussion.moderate", "risks.delete", "time.delete",
   "automation.edit", "reports.export", "chat.channels", "people.progress", "attendance.team", "leave.approve",
 ];
 
@@ -129,23 +134,28 @@ export const SYSTEM_ORDER = SYSTEM_META.map((m) => m.key);
  */
 export function compatRole(perms: Set<string>): WorkspaceRole {
   for (const r of ["ADMIN", "PROJECT_MANAGER", "MEMBER"] as WorkspaceRole[]) {
-    // attendance and leave are new, so they are not part of this old comparison
-    if (DEFAULT_PERMS[r].filter((p) => !isHr(p)).every((p) => perms.has(p))) return r;
+    // attendance, leave and meetings are newer than this comparison
+    if (DEFAULT_PERMS[r].filter((p) => !isLater(p)).every((p) => perms.has(p))) return r;
   }
   return "VIEWER";
 }
 
 /* -------------------------------- seeding -------------------------------- */
 
-const SEED_VERSION = 2; // 2 = attendance and leave modules added
-const ADDED_V2 = new Set(ALL_PERMS.filter(isHr));
+const SEED_VERSION = 3; // 2 = attendance and leave, 3 = meetings
+// permissions that were introduced in a version (a role only gets what is newer than the version it was last seeded with)
+const INTRODUCED: Record<number, Set<string>> = {
+  2: new Set(ALL_PERMS.filter(isHr)),
+  3: new Set(ALL_PERMS.filter((p) => p.startsWith("meetings."))),
+};
 const seeded = new Set<string>();
 
-/** Built-in roles that were created before a version get the new permissions ONCE (nothing is ever taken away). */
+/** Built-in roles that were created before a version get the new permissions ONCE (nothing is ever taken away or given twice). */
 async function upgradeRoles(workspaceId: string) {
   const old: any[] = await AccessRole.find({ workspaceId, systemKey: { $in: SYSTEM_ORDER }, seedVersion: { $ne: SEED_VERSION } });
   for (const r of old) {
-    const add = (DEFAULT_PERMS[r.systemKey as WorkspaceRole] || []).filter((p) => ADDED_V2.has(p));
+    const from = r.seedVersion || 1;
+    const add = (DEFAULT_PERMS[r.systemKey as WorkspaceRole] || []).filter((p) => Object.entries(INTRODUCED).some(([v, set]) => Number(v) > from && set.has(p)));
     r.permissions = [...new Set([...(r.permissions || []), ...add])];
     r.seedVersion = SEED_VERSION;
     await r.save();

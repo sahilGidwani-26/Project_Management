@@ -20,11 +20,13 @@ import eventRoutes from "./event.routes";
 import googleCalendarRoutes from "./googleCalendar.routes";
 import standupRoutes from "./standup.routes";
 import attendanceRoutes from "./attendance.routes";
+import meetingRoutes from "./meeting.routes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/auth/google-calendar", googleCalendarRoutes);
+router.use("/meetings", meetingRoutes);
 router.use("/workspaces", workspaceRoutes);
 router.use("/projects", projectRoutes);
 router.use("/tasks", taskRoutes);

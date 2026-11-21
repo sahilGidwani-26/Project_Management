@@ -59,6 +59,9 @@ import TeamDepartments from "@/pages/TeamDepartments";
 import TeamOrgChart from "@/pages/TeamOrgChart";
 import Roles from "@/pages/Roles";
 import Attendance from "@/pages/Attendance";
+import MeetTest from "@/pages/MeetTest";
+import Meetings from "@/pages/Meetings";
+import MeetJoin from "@/pages/MeetJoin";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -76,6 +79,8 @@ export default function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/invitations/:token" element={<AcceptInvite />} />
+              <Route path="/meet/:code" element={<MeetJoin />} />
+              {/* <Route path="/meet-test/:code" element={<MeetTest />} /> */}
 
               <Route element={<ProtectedRoute />}>
                 <Route path="/onboarding" element={<Onboarding />} />
@@ -88,6 +93,7 @@ export default function App() {
                   <Route path="tasks" element={<Tasks />} />
                   <Route path="calendar" element={<CalendarPage />} />
                   <Route path="attendance" element={<Attendance />} />
+                  <Route path="meetings" element={<Meetings />} />
                   <Route path="attendance/:tab" element={<Attendance />} />
                   <Route path="projects/:projectId" element={<ProjectLayout />}>
                     <Route index element={<Navigate to="overview" replace />} />
