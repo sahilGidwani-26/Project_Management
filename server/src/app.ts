@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import routes from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { env } from "./config/env";
+import { mailContextMiddleware } from "./utils/mailContext";
 
 export function createApp(): Application {
   const app = express();
@@ -30,6 +31,7 @@ export function createApp(): Application {
 
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
+    app.use(mailContextMiddleware);
 
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

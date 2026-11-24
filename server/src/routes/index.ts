@@ -22,6 +22,8 @@ import standupRoutes from "./standup.routes";
 import attendanceRoutes from "./attendance.routes";
 import meetingRoutes from "./meeting.routes";
 import dashboardRoutes from "./dashboard.routes";
+import profileRoutes from "./profile.routes";
+import mediaRoutes from "./media.routes";
 
 const router = Router();
 
@@ -44,6 +46,8 @@ router.use("/attachments", attachmentRoutes);
 router.use("/templates", templateRoutes);
 router.use("/saved-views", savedViewRoutes);
 router.use("/integrations/github/webhook", githubWebhookRoutes);
+router.use("/profile", profileRoutes);
+router.use("/media", mediaRoutes);
 router.use("/search", searchRoutes);
 router.use("/events", eventRoutes);
 router.use("/standup", standupRoutes);

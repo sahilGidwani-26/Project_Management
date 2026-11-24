@@ -44,15 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await api.post("/auth/login", { email, password });
     localStorage.setItem("pm_token", res.data.data.token);
-    setUser(res.data.data.user);
-    getSocket();
+    await refetchUser(); // loads the full user (with _id, phone, photo...)
   };
 
   const register = async (name: string, email: string, password: string) => {
     const res = await api.post("/auth/register", { name, email, password });
     localStorage.setItem("pm_token", res.data.data.token);
-    setUser(res.data.data.user);
-    getSocket();
+    await refetchUser();
   };
 
   const logout = async () => {

@@ -127,20 +127,19 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="p-3 border-t border-sidebar-border">
-        <NavLink
-          to={`/app/${workspaceId}/settings`}
-          className="flex items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-sidebar-accent transition-colors"
-        >
+      <div className="flex items-center gap-1 border-t border-sidebar-border p-3">
+        <NavLink to={`/app/${workspaceId}/profile`} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent">
           <Avatar className="h-7 w-7">
             <AvatarImage src={user?.profileImage} />
             <AvatarFallback>{initials(user?.name)}</AvatarFallback>
           </Avatar>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{user?.name}</p>
             <p className="truncate text-xs text-sidebar-foreground/60">{roleName || user?.email}</p>
           </div>
-          <Settings className="h-4 w-4 opacity-60" />
+        </NavLink>
+        <NavLink to={`/app/${workspaceId}/settings`} aria-label="Settings" className="rounded-md p-2 transition-colors hover:bg-sidebar-accent">
+          <Settings className="h-4 w-4 opacity-70" />
         </NavLink>
       </div>
     </aside>

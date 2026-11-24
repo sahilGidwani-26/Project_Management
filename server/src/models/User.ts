@@ -40,6 +40,12 @@ export interface IUser extends Document {
   updatedAt: Date;
   mustChangePassword?: boolean;
   createdByWorkspaceId?: Types.ObjectId;
+  phone?: string;
+  city?: string;
+  country?: string;
+  website?: string;
+  social?: { linkedin?: string; github?: string; twitter?: string; instagram?: string };
+  accountType?: "owner" | "member";
 }
 
 const userSchema = new Schema<IUser>(
@@ -61,6 +67,12 @@ const userSchema = new Schema<IUser>(
     emailVerificationTokenHash: { type: String, select: false },
     mustChangePassword: { type: Boolean, default: false }, // admin-created account still using its temporary password
     createdByWorkspaceId: { type: Schema.Types.ObjectId, ref: "Workspace" },
+    phone: String,
+    city: String,
+    country: String,
+    website: String,
+    social: { linkedin: String, github: String, twitter: String, instagram: String },
+    accountType: { type: String, enum: ["owner", "member"] }, // chosen at signup
     notificationPreferences: {
       taskAssigned: { type: Boolean, default: true },
       mentions: { type: Boolean, default: true },
