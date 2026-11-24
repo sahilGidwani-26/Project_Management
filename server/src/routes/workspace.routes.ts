@@ -4,6 +4,7 @@ import { loadWorkspaceRole, requireAnyPermission, requirePermission } from "../m
 import { validate } from "../middleware/validate";
 import { createWorkspaceSchema, inviteMemberSchema } from "../validations/workspace.validation";
 import { bulkImportSchema, createMemberSchema, updateMemberSchema } from "../validations/people.validation";
+import { getCompany, getEmail, removeEmail, removeLogo, saveEmail, testEmail, updateCompany, uploadLogo } from "../controllers/workspaceSettings.controller";
 import {
   createWorkspace,
   listMyWorkspaces,
@@ -53,6 +54,16 @@ router.put("/:workspaceId/members/:memberId/role", ...need("roles.assign"), assi
 router.get("/:workspaceId", loadWorkspaceRole, getWorkspace); // every member needs the workspace name
 router.patch("/:workspaceId", ...need("workspace.edit"), updateWorkspace);
 router.delete("/:workspaceId", ...need("workspace.delete"), deleteWorkspace);
+
+router.get("/:workspaceId/company", loadWorkspaceRole, getCompany); // everybody sees the public part, editors see all
+router.put("/:workspaceId/company", ...need("workspace.edit"), updateCompany);
+router.put("/:workspaceId/logo", ...need("workspace.edit"), uploadLogo);
+router.delete("/:workspaceId/logo", ...need("workspace.edit"), removeLogo);
+
+router.get("/:workspaceId/email", ...need("workspace.edit"), getEmail);
+router.put("/:workspaceId/email", ...need("workspace.edit"), saveEmail);
+router.post("/:workspaceId/email/test", ...need("workspace.edit"), testEmail);
+router.delete("/:workspaceId/email", ...need("workspace.edit"), removeEmail);
 
 /* ---- people overviews (fixed paths first, they must come before /members/:memberId) ---- */
 router.get("/:workspaceId/departments", ...need("people.view"), listDepartments);

@@ -8,6 +8,15 @@ export interface User {
   isSuperAdmin?: boolean;
   lastLoginAt?: string;
   mustChangePassword?: boolean;
+    phone?: string;
+  city?: string;
+  country?: string;
+  website?: string;
+  social?: { linkedin?: string; github?: string; twitter?: string; instagram?: string };
+  accountType?: "owner" | "member";
+  emailVerified?: boolean;
+  timezone?: string;
+  notificationPreferences?: { taskAssigned?: boolean; mentions?: boolean; comments?: boolean; deadlines?: boolean; workspaceInvites?: boolean; standupDigest?: boolean; standupHour?: number };
 }
 
 export type WorkspaceRole = "OWNER" | "ADMIN" | "PROJECT_MANAGER" | "MEMBER" | "VIEWER";

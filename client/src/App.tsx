@@ -62,6 +62,9 @@ import Attendance from "@/pages/Attendance";
 import MeetTest from "@/pages/MeetTest";
 import Meetings from "@/pages/Meetings";
 import MeetJoin from "@/pages/MeetJoin";
+import ResetPassword from "@/pages/auth/ResetPassword";
+import VerifyEmail from "@/pages/auth/VerifyEmail";
+import Profile from "@/pages/Profile";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } },
@@ -78,6 +81,8 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/invitations/:token" element={<AcceptInvite />} />
               <Route path="/meet/:code" element={<MeetJoin />} />
               {/* <Route path="/meet-test/:code" element={<MeetTest />} /> */}
@@ -94,6 +99,7 @@ export default function App() {
                   <Route path="calendar" element={<CalendarPage />} />
                   <Route path="attendance" element={<Attendance />} />
                   <Route path="meetings" element={<Meetings />} />
+                  <Route path="profile" element={<Profile />} />
                   <Route path="attendance/:tab" element={<Attendance />} />
                   <Route path="projects/:projectId" element={<ProjectLayout />}>
                     <Route index element={<Navigate to="overview" replace />} />
@@ -118,6 +124,7 @@ export default function App() {
                     <Route path="risks" element={<ProjectRisks />} />
                     <Route path="automation" element={<ProjectAutomation />} />
                     <Route path="settings" element={<ProjectSettings />} />
+                    
                   </Route>
                   <Route path="my-tasks" element={<MyTasks />} />
                   <Route path="standup" element={<Standup />} />

@@ -7,6 +7,7 @@ import { sendMail } from "../utils/mailer";
 import { dayKeyIn, hmIn, hmToMin, isWorkingDay, minutesOfDay } from "../services/attendanceCalc";
 import { trackedPeople } from "../services/attendanceMembers";
 import { attendanceUrl, checkInReminderEmail, checkOutReminderEmail } from "../utils/attendanceEmailTemplates";
+import { mailCtx } from "../utils/mailContext";
 
 const EVERY = 5 * 60 * 1000;
 const WINDOW = 120; // a reminder may still go out up to 2 hours after its time (so a server restart does not skip the day)
@@ -17,7 +18,7 @@ export function startAttendanceJob(io: SocketIOServer) {
       const list: any[] = await AttendanceSettings.find({ $or: [{ reminderEnabled: true }, { checkoutReminderEnabled: true }] }).lean();
       for (const s of list) {
         try {
-          await remind(s, io);
+          await mailCtx.run({ workspaceId: String(s.workspaceId) }, () => remind(s, io));
         } catch (e) {
           console.error(`[attendance] workspace ${s.workspaceId} skipped:`, (e as Error).message); // one workspace never stops the rest
         }
@@ -92,14 +93,14 @@ async function remind(s: any, io: SocketIOServer) {
     // morning: has not checked in at all today (and nobody marked the day by hand)
     if (inDue && !sessions.length && !rec?.manualStatus && (await claim(wid, p.userId, date, "checkin"))) {
       const mail = checkInReminderEmail({ name: u.name, workspaceName, shiftStart: s.workStart, url });
-      sendMail(u.email, mail.subject, mail.html).catch(() => {});
+      sendMail(u.email, mail.subject, mail.html).catch(() => { });
       await bell(p.userId, "Time to check in", `Your workday starts at ${s.workStart}. Don't forget to check in.`);
     }
 
     // evening: still checked in
     if (outDue && open && (await claim(wid, p.userId, date, "checkout"))) {
       const mail = checkOutReminderEmail({ name: u.name, workspaceName, since: hmIn(+new Date(open.in), tz), url });
-      sendMail(u.email, mail.subject, mail.html).catch(() => {});
+      sendMail(u.email, mail.subject, mail.html).catch(() => { });
       await bell(p.userId, "You are still checked in", "Please check out so your hours are counted correctly.");
     }
   }

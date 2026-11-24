@@ -1,5 +1,6 @@
 import { WorkspaceMember, WorkspaceRole } from "../models/WorkspaceMember";
 import { AccessRole } from "../models/AccessRole";
+import { setMailWorkspace } from "../utils/mailContext";
 
 /* ------------------------------ the catalog ------------------------------ */
 
@@ -204,6 +205,7 @@ export interface AccessCtx {
 /** Everything a person can do in a workspace (null = not an active member). */
 export async function getAccess(workspaceId: unknown, userId: string): Promise<AccessCtx | null> {
   const wid = String(workspaceId);
+  setMailWorkspace(wid); // emails sent while handling this request go out from this workspace's own email account
   const member: any = await WorkspaceMember.findOne({ workspaceId: wid, userId, status: "active" }).select("role roleId").lean();
   if (!member) return null;
   await ensureSystemRoles(wid);

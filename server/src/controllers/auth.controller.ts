@@ -9,11 +9,14 @@ import { signToken, setAuthCookie, clearAuthCookie } from "../utils/token";
 import { sendMail } from "../utils/mailer";
 import { generateRawToken, hashToken } from "../utils/crypto";
 import { env } from "../config/env";
+import { limit } from "../services/meeting";
+import { esc, wrap } from "../utils/emailTemplates";
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
 export const register = catchAsync(async (req: Request, res: Response) => {
-  const { name, email, password } = req.body;
+    const { name, password } = req.body;
+  const email = String(req.body.email || "").trim().toLowerCase();
 
   const existing = await User.findOne({ email });
   if (existing) throw ApiError.conflict("An account with this email already exists");
@@ -29,9 +32,7 @@ export const register = catchAsync(async (req: Request, res: Response) => {
   setAuthCookie(res, token);
 
   const verifyUrl = `${env.CLIENT_URL}/verify-email?token=${rawToken}`;
-  sendMail(email, "Verify your email", `<p>Welcome, ${name}! Verify your email: <a href="${verifyUrl}">${verifyUrl}</a></p>`).catch(
-    () => {}
-  );
+    sendMail(email, "Verify your email", wrap("Welcome to Flowbase", `<p>Hi ${esc(String(name).split(" ")[0])}, confirm your email address to finish setting up your account.</p>`, verifyUrl, "Verify email")).catch(() => {});
 
   return sendSuccess(
     res,
@@ -55,7 +56,11 @@ export const verifyEmail = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const login = catchAsync(async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+    const { password } = req.body;
+  const email = String(req.body.email || "").trim().toLowerCase();
+  if (!limit(`login:${req.ip}:${email}`, 10, 15 * 60e3)) {
+    return res.status(429).json({ success: false, message: "Too many login attempts. Please wait a few minutes and try again." });
+  }
 
   const user = await User.findOne({ email }).select("+passwordHash");
   if (!user || !user.passwordHash) throw ApiError.unauthorized("Invalid email or password");
@@ -119,7 +124,10 @@ export const changePassword = catchAsync(async (req: Request, res: Response) => 
 });
 
 export const forgotPassword = catchAsync(async (req: Request, res: Response) => {
-  const { email } = req.body;
+    const email = String(req.body.email || "").trim().toLowerCase();
+  if (!limit(`forgot:${req.ip}:${email}`, 5, 3600e3)) {
+    return res.status(429).json({ success: false, message: "Too many requests. Please try again in an hour." });
+  }
   const user = await User.findOne({ email });
 
   // Always respond the same way so we don't leak which emails exist.
@@ -130,9 +138,7 @@ export const forgotPassword = catchAsync(async (req: Request, res: Response) => 
     await user.save();
 
     const resetUrl = `${env.CLIENT_URL}/reset-password?token=${rawToken}`;
-    sendMail(email, "Reset your password", `<p>Click to reset: <a href="${resetUrl}">${resetUrl}</a></p>`).catch(
-      () => {}
-    );
+       sendMail(email, "Reset your password", wrap("Reset your password", `<p>Hi ${esc(String(user.name).split(" ")[0])}, we got a request to reset your password. The link works for 1 hour. If this was not you, ignore this email.</p>`, resetUrl, "Choose a new password")).catch(() => {});
   }
 
   return sendSuccess(res, 200, null, "If that email exists, a reset link has been sent");
@@ -206,10 +212,15 @@ export const googleAuth = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const updateNotificationPreferences = catchAsync(async (req: Request, res: Response) => {
-  const user = await User.findByIdAndUpdate(
-    req.user!.id,
-    { notificationPreferences: req.body },
-    { new: true }
-  );
+  const set: Record<string, unknown> = {};
+  for (const k of ["taskAssigned", "mentions", "comments", "deadlines", "workspaceInvites", "standupDigest"]) {
+    if (typeof req.body?.[k] === "boolean") set[`notificationPreferences.${k}`] = req.body[k];
+  }
+  if (req.body?.standupHour !== undefined) {
+    const h = Math.round(Number(req.body.standupHour));
+    if (!Number.isFinite(h) || h < 5 || h > 12) throw ApiError.badRequest("Choose an hour between 5 and 12");
+    set["notificationPreferences.standupHour"] = h;
+  }
+  const user = await User.findByIdAndUpdate(req.user!.id, { $set: set }, { new: true });
   return sendSuccess(res, 200, user?.notificationPreferences, "Notification preferences updated");
 });

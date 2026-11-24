@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Bell, LogOut, User as UserIcon, Menu } from "lucide-react";
+import { Search, Bell, LogOut, User as UserIcon, Menu, SettingsIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -69,11 +69,11 @@ export function Topbar() {
               <p className="text-xs font-normal text-muted-foreground truncate">{user?.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate(`/app/${workspaceId}/settings`)}>
-              <UserIcon className="h-4 w-4" /> Profile & Settings
+            <DropdownMenuItem onClick={() => navigate(`/app/${workspaceId}/profile`)}>
+              <UserIcon className="h-4 w-4" /> My profile
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/app/${workspaceId}/team/me`)}>
-              <UserIcon className="h-4 w-4" /> My work profile
+            <DropdownMenuItem onClick={() => navigate(`/app/${workspaceId}/settings`)}>
+              <SettingsIcon className="h-4 w-4" /> Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
