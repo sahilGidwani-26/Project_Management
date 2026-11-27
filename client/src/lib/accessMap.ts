@@ -89,3 +89,16 @@ export function setPerm(cur: Set<string>, perm: string, on: boolean, requires: M
   }
   return next;
 }
+
+
+export interface TabGroup { key: string; label: string; tabs: string[] }
+
+/** The project tabs are shown in these groups. A tab that is in no group still appears, under “More”. */
+export const PROJECT_GROUPS: TabGroup[] = [
+  { key: "project", label: "Project", tabs: ["overview", "members", "settings"] },
+  { key: "work", label: "Work", tabs: ["board", "list", "bugs", "timeline", "calendar"] },
+  { key: "planning", label: "Planning", tabs: ["sprints", "poker", "releases"] },
+  { key: "insights", label: "Insights", tabs: ["reports", "sprint-reports", "forecast", "time", "risks"] },
+  { key: "collab", label: "Collaborate", tabs: ["discussion", "files", "standup"] },
+  { key: "connect", label: "Connect", tabs: ["github", "automation"] },
+];
